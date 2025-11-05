@@ -23,23 +23,50 @@ using Random = UnityEngine.Random;
 
 public class GameManager
 {
-	// BrickGameManager 참조
-	private BrickGameManager _brickGame;
-	public BrickGameManager BrickGame
-	{
-		get
-		{
-			if (_brickGame == null)
-			{
-				// _brickGame = UnityEngine.Object.FindObjectOfType<BrickGameManager>();
-			}
-			return _brickGame;
-		}
-	}
+	// BrickGameManager 참조 (Non-MonoBehaviour)
+	private BrickGameManager _brickGame = new BrickGameManager();
+	private System.IDisposable _brickGameUpdateSubscription;
+
+	public BrickGameManager BrickGame => _brickGame;
 
 	public GameManager()
 	{
 		Debug.Log("<color=yellow>[GameManager]</color> 생성됨");
+	}
+
+	/// <summary>
+	/// BrickGame 초기화 (BrickGameInitializer에서 호출)
+	/// Client는 brickPlacer를 null로 전달 가능 (Server만 벽돌 생성)
+	/// </summary>
+	public void InitializeBrickGame(
+		IBrickPlacer brickPlacer,
+		PhysicsPlank plank,
+		Camera mainCamera,
+		BrickGameSettings settings)
+	{
+		GameLogger.Progress("GameManager", "BrickGame 초기화 시작...");
+
+		// BrickGameManager 초기화
+		_brickGame.Initialize(brickPlacer, plank, mainCamera, settings);
+
+		// ActionBus에 Update 구독
+		_brickGameUpdateSubscription = Managers.Subscribe(
+			MB.Infrastructure.Messages.ActionId.System_Update,
+			_brickGame.OnUpdate
+		);
+
+		GameLogger.Success("GameManager", "BrickGame 초기화 완료 및 Update 구독됨!");
+	}
+
+	/// <summary>
+	/// BrickGame 정리 (씬 전환 시 호출)
+	/// </summary>
+	public void CleanupBrickGame()
+	{
+		_brickGameUpdateSubscription?.Dispose();
+		_brickGameUpdateSubscription = null;
+
+		GameLogger.Info("GameManager", "BrickGame 정리 완료 (Update 구독 해제)");
 	}
 
 

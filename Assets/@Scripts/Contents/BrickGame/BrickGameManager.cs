@@ -9,8 +9,9 @@ public class BrickGameManager
 {
     #region 의존성 (Dependency Injection)
     private IBrickPlacer _brickPlacer;
+    private Unity.Netcode.NetworkManager _networkManager;
     #endregion
-    
+
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
@@ -78,21 +79,24 @@ public class BrickGameManager
         Camera mainCamera,
         BrickGameSettings settings)
     {
-        // brickPlacer는 선택적 (1인 테스트에서는 불필요)
+        // brickPlacer는 선택적 (Client에서는 null)
         _brickPlacer = brickPlacer;
         _settings = settings ?? BrickGameSettings.CreateDefault();
-        
+
+        // NetworkManager 참조 저장 (멀티플레이어 체크용)
+        _networkManager = Unity.Netcode.NetworkManager.Singleton;
+
         if (_brickPlacer == null)
         {
-            GameLogger.Warning("BrickGameManager", "BrickPlacer가 null입니다. 벽돌 자동 생성 불가");
+            GameLogger.Warning("BrickGameManager", "BrickPlacer가 null입니다. 벽돌 자동 생성 불가 (Client 모드 OK)");
         }
-        
+
         // Sub-Managers 초기화
         // ✅ InputManager 제거: 전역 Managers.Input이 ActionBus를 통해 입력 발행
         _plankManager.Initialize(plank, mainCamera);
         _ballManager.Initialize();
         _brickManager.Initialize();
-        
+
         GameLogger.Success("BrickGameManager", "초기화 완료 (의존성 주입됨)");
     }
     #endregion
@@ -229,6 +233,14 @@ public class BrickGameManager
     /// </summary>
     public void OnUpdate()
     {
+        // 🔒 멀티플레이어 Server Authority 체크
+        // Client는 게임 로직을 실행하지 않음 (Server 명령만 수신)
+        if (_networkManager != null && _networkManager.IsListening && !_networkManager.IsServer)
+        {
+            // Client는 렌더링만 담당
+            return;
+        }
+
         // ✅ 디버깅: OnUpdate가 호출되는지 확인 (매 60프레임마다)
         if (Time.frameCount % 60 == 0)
         {
@@ -258,7 +270,7 @@ public class BrickGameManager
         // BallManager 파워 타이머 업데이트
         _ballManager.UpdatePowerTimer(Time.deltaTime);
 
-        // 시간 체크하여 새 행 생성 여부 결정
+        // 시간 체크하여 새 행 생성 여부 결정 (Server만)
         if (Time.time >= _state.NextSpawnTime)
         {
             SpawnNewRow();

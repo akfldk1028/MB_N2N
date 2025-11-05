@@ -28,7 +28,37 @@ public class SceneManagerEx
 	{
 		//Managers.Clear();
 		GameLogger.Progress("SceneManagerEx", $"LoadScene {type} 시작");
-		SceneManager.LoadScene(GetSceneName(type));
+
+		string sceneName = GetSceneName(type);
+
+		// 🔒 멀티플레이어 씬 전환 체크
+		var networkManager = Unity.Netcode.NetworkManager.Singleton;
+
+		if (networkManager != null && networkManager.IsListening)
+		{
+			// 멀티플레이어 모드: NetworkManager의 SceneManager 사용
+			if (networkManager.IsServer)
+			{
+				GameLogger.Info("SceneManagerEx", $"[Server] NetworkManager로 씬 전환: {sceneName}");
+				var status = networkManager.SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
+
+				if (status != Unity.Netcode.SceneEventProgressStatus.Started)
+				{
+					GameLogger.Error("SceneManagerEx", $"씬 전환 실패: {status}");
+				}
+			}
+			else
+			{
+				// Client는 Server의 명령을 기다림 (자동으로 씬 전환됨)
+				GameLogger.Info("SceneManagerEx", $"[Client] Server의 씬 전환 명령 대기 중...");
+			}
+		}
+		else
+		{
+			// 싱글플레이어 모드: 기존 SceneManager 사용
+			GameLogger.Info("SceneManagerEx", $"[SinglePlayer] Unity SceneManager로 씬 전환: {sceneName}");
+			SceneManager.LoadScene(sceneName);
+		}
 	}
 
 	private string GetSceneName(Define.EScene type)

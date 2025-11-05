@@ -42,6 +42,7 @@ public class BrickGameInitializer
     #region Collection
     private SceneObjects CollectSceneObjects()
     {
+        GameLogger.Progress("BrickGameInitializer", "씬 오브젝트 수집 시작...");
 
         var objects = new SceneObjects
         {
@@ -52,6 +53,13 @@ public class BrickGameInitializer
             Bricks = Object.FindObjectsByType<Brick>(FindObjectsSortMode.None)
         };
 
+        // 수집 결과 로그
+        GameLogger.Info("BrickGameInitializer", $"ObjectPlacement: {(objects.ObjectPlacement != null ? "✅" : "❌")}");
+        GameLogger.Info("BrickGameInitializer", $"PhysicsPlank: {(objects.Plank != null ? "✅" : "❌")}");
+        GameLogger.Info("BrickGameInitializer", $"MainCamera: {(objects.MainCamera != null ? "✅" : "❌")}");
+        GameLogger.Info("BrickGameInitializer", $"Balls: {objects.Balls?.Length ?? 0}개");
+        GameLogger.Info("BrickGameInitializer", $"Bricks: {objects.Bricks?.Length ?? 0}개");
+
         return objects;
     }
     #endregion
@@ -59,33 +67,55 @@ public class BrickGameInitializer
     #region Validation
     private bool ValidateRequirements(SceneObjects objects)
     {
+        GameLogger.Progress("BrickGameInitializer", "필수 오브젝트 검증 중...");
 
         bool isValid = true;
 
         // 선택: ObjectPlacement (멀티플레이어에서는 불필요)
         if (objects.ObjectPlacement == null)
         {
+            GameLogger.Warning("BrickGameInitializer", "ObjectPlacement 없음 (Client 모드는 정상)");
+        }
+        else
+        {
+            GameLogger.Success("BrickGameInitializer", "ObjectPlacement 발견!");
         }
 
         // 필수: PhysicsPlank
         if (objects.Plank == null)
         {
+            GameLogger.Error("BrickGameInitializer", "❌ PhysicsPlank를 찾을 수 없습니다! (필수)");
             isValid = false;
+        }
+        else
+        {
+            GameLogger.Success("BrickGameInitializer", "PhysicsPlank 발견!");
         }
 
         // 필수: Camera
         if (objects.MainCamera == null)
         {
+            GameLogger.Error("BrickGameInitializer", "❌ MainCamera를 찾을 수 없습니다! (필수)");
             isValid = false;
+        }
+        else
+        {
+            GameLogger.Success("BrickGameInitializer", "MainCamera 발견!");
         }
 
         // 선택: PhysicsBall (동적 생성 가능)
         if (objects.Balls == null || objects.Balls.Length == 0)
         {
+            GameLogger.Info("BrickGameInitializer", "PhysicsBall 없음 (동적 생성 예정)");
         }
 
         if (isValid)
         {
+            GameLogger.Success("BrickGameInitializer", "✅ 모든 필수 오브젝트 검증 통과!");
+        }
+        else
+        {
+            GameLogger.Error("BrickGameInitializer", "❌ 필수 오브젝트 검증 실패!");
         }
 
         return isValid;
@@ -95,14 +125,16 @@ public class BrickGameInitializer
     #region Dependency Injection
     private void InjectDependencies(SceneObjects objects)
     {
+        // GameManager 초기화 호출
+        // Client도 동일하게 초기화하되, BrickGameManager.OnUpdate()에서 IsServer 체크
+        Managers.Game.InitializeBrickGame(
+            objects.ObjectPlacement,  // Client도 받지만 사용 안 함 (OnUpdate에서 체크)
+            objects.Plank,
+            objects.MainCamera,
+            null  // 기본 설정 사용
+        );
 
-        // Managers.Game.InitializeBrickGame(
-        //     objects.ObjectPlacement,
-        //     objects.Plank,
-        //     objects.MainCamera,
-        //     null  // 기본 설정 사용
-        // );
-
+        GameLogger.Success("BrickGameInitializer", "BrickGame 의존성 주입 완료");
     }
     #endregion
 
