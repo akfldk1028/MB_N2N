@@ -3,7 +3,9 @@
     "allow": [
       "Bash(move BrickGameManager_Old.cs BrickGameManager.cs)",
       "Bash(powershell:*)",
-      "mcp__sequential-thinking__sequentialthinking"
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__memory__create_entities",
+      "mcp__memory__create_relations"
     ],
     "deny": [],
     "ask": []

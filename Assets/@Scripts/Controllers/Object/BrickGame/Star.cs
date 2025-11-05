@@ -16,21 +16,12 @@ namespace Unity.Assets.Scripts.Objects
         
         private bool isCollected = false;
         
-        // 게임 매니저 참조
-        private BrickGameManager gameManager;
-        
         private void Start()
         {
             // 태그 설정 (없는 경우)
             if (string.IsNullOrEmpty(gameObject.tag) || gameObject.tag == "Untagged")
             {
                 gameObject.tag = "Star";
-            }
-            
-            gameManager = FindObjectOfType<BrickGameManager>();
-            if (gameManager == null)
-            {
-                Debug.LogWarning("BrickGameManager를 찾을 수 없습니다. 점수가 추가되지 않을 수 있습니다.");
             }
             
             if (starRenderer == null)

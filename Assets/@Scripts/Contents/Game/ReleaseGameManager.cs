@@ -41,17 +41,17 @@ public class ReleaseGameManager : MonoBehaviour
         OnGameStart?.Invoke();
 
         // --- BrickGameManager 찾기 ---
-        _brickGameManager = FindObjectOfType<BrickGameManager>();
-        if (_brickGameManager != null)
-        {
-            _latestScore = _brickGameManager.GetCurrentScore();
-            _brickGameManager.OnScoreChanged += HandleScoreChange;
-            Debug.Log($"<color=green>[ReleaseGameManager] Initial Score: {_latestScore}</color> ");
-        }
-        else
-        {
-             Debug.LogError($"<color=red>[ReleaseGameManager] BrickGameManager를 찾을 수 없습니다!</color> ");
-        }
+        // _brickGameManager = FindObjectOfType<BrickGameManager>();
+        // if (_brickGameManager != null)
+        // {
+        //     _latestScore = _brickGameManager.GetCurrentScore();
+        //     _brickGameManager.OnScoreChanged += HandleScoreChange;
+        //     Debug.Log($"<color=green>[ReleaseGameManager] Initial Score: {_latestScore}</color> ");
+        // }
+        // else
+        // {
+        //      Debug.LogError($"<color=red>[ReleaseGameManager] BrickGameManager를 찾을 수 없습니다!</color> ");
+        // }
         
         // --- IsometricGridGenerator에서 캐논 배열 가져오기 ---
         if (IsometricGridGenerator.Instance != null)

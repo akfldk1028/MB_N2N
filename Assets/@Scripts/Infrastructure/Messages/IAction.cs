@@ -14,7 +14,19 @@ namespace MB.Infrastructure.Messages
         Network_ClientConnected,
         Network_ClientDisconnected,
         Input_PrimaryAction,
-        Input_SecondaryAction
+        Input_SecondaryAction,
+        // ✅ 입력 이벤트 (전역 InputManager가 발행)
+        Input_ArrowKey,           // BrickGame 방향키 (←/→)
+        Input_PlayerMove,         // 3D 게임 WASD 이동
+        Input_MouseWorldClick,    // MapEditor 월드 클릭
+        Input_MouseCellClick,     // MapEditor 셀 클릭
+        Input_MouseCellDrag,      // MapEditor 셀 드래그
+        Input_Interact,           // F키 상호작용 (음식 서빙)
+        Input_CameraBackView,     // B키 카메라
+        Input_CameraTopView,      // T키 카메라
+        Input_RhythmGameStart,    // Space키 리듬게임 시작
+        Input_RhythmGameSkip,     // Tab키 리듬게임 스킵
+        Input_RhythmGameExit      // Esc키 리듬게임 종료
     }
 
     public interface IActionPayload { }
@@ -23,7 +35,19 @@ namespace MB.Infrastructure.Messages
     {
         public static readonly NoPayload Instance = new NoPayload();
     }
-
+    // ✅ 입력 관련 Payload 타입들
+    /// <summary>
+    /// 방향키 입력 (-1: 왼쪽, 0: 정지, 1: 오른쪽)
+    /// </summary>
+    public readonly struct ArrowKeyPayload : IActionPayload
+    {
+        public float Horizontal { get; }
+        
+        public ArrowKeyPayload(float horizontal)
+        {
+            Horizontal = horizontal;
+        }
+    }
     public readonly struct ActionMessage
     {
         public ActionId Id { get; }

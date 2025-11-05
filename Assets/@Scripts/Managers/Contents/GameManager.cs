@@ -31,7 +31,7 @@ public class GameManager
 		{
 			if (_brickGame == null)
 			{
-				_brickGame = UnityEngine.Object.FindObjectOfType<BrickGameManager>();
+				// _brickGame = UnityEngine.Object.FindObjectOfType<BrickGameManager>();
 			}
 			return _brickGame;
 		}
