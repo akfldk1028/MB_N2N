@@ -65,11 +65,30 @@ namespace Unity.Assets.Scripts.Objects
         {
             isGameOverTriggered = true;
             Debug.LogError($"[Brick] 게임 오버: 벽돌 {gameObject.name}이 바닥 경계선({bottomBoundary})에 도달했습니다!");
-            
-            // 게임 매니저에 게임 오버 알림
-            if (Managers.Game?.BrickGame != null)
+
+            // ✅ 멀티플레이어: 플레이어별 게임 오버
+            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+            var networkManager = Unity.Netcode.NetworkManager.Singleton;
+
+            if (brickNetObj != null && networkManager != null && networkManager.IsListening)
             {
-                Managers.Game.BrickGame.GameOver();
+                // 멀티플레이어 모드: 해당 플레이어의 게임만 오버
+                ulong ownerClientId = brickNetObj.OwnerClientId;
+                var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
+
+                if (playerGame != null)
+                {
+                    playerGame.GameOver();
+                    GameLogger.Warning("Brick", $"[Player {ownerClientId}] 게임 오버!");
+                }
+            }
+            else
+            {
+                // 싱글플레이어 모드: 기본 BrickGame 게임 오버
+                if (Managers.Game?.BrickGame != null)
+                {
+                    Managers.Game.BrickGame.GameOver();
+                }
             }
         }
         
@@ -77,13 +96,54 @@ namespace Unity.Assets.Scripts.Objects
         protected override void OnCollisionEnter2D(Collision2D collision)
         {
             base.OnCollisionEnter2D(collision);
-            
+
             HandleBallCollision(collision);
+        }
+
+        /// <summary>
+        /// 멀티플레이어: 벽돌과 공의 소유권이 일치하는지 확인
+        /// </summary>
+        private bool CheckOwnership(GameObject ballObject)
+        {
+            // NetworkObject 컴포넌트 확인
+            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+            Unity.Netcode.NetworkObject ballNetObj = ballObject.GetComponent<Unity.Netcode.NetworkObject>();
+
+            // NetworkObject가 없으면 싱글플레이어 모드 (항상 충돌 허용)
+            if (brickNetObj == null || ballNetObj == null)
+            {
+                return true;
+            }
+
+            // NetworkManager가 없거나 비활성이면 싱글플레이어 모드
+            var networkManager = Unity.Netcode.NetworkManager.Singleton;
+            if (networkManager == null || !networkManager.IsListening)
+            {
+                return true;
+            }
+
+            // 멀티플레이어: OwnerClientId 비교
+            bool isSameOwner = brickNetObj.OwnerClientId == ballNetObj.OwnerClientId;
+
+            if (!isSameOwner)
+            {
+                // 디버그: 소유권 불일치
+                GameLogger.Info("Brick", $"충돌 무시: Brick Owner={brickNetObj.OwnerClientId}, Ball Owner={ballNetObj.OwnerClientId}");
+            }
+
+            return isSameOwner;
         }
         
         // 공과 충돌 시 처리
         private void HandleBallCollision(Collision2D collision)
         {
+            // ✅ 멀티플레이어: 소유권 확인
+            if (!CheckOwnership(collision.gameObject))
+            {
+                // 소유권이 다른 플레이어의 공이면 충돌 무시
+                return;
+            }
+
             // 효과음 재생 (필요한 경우)
             /*
             if (brickHitSound != null && !brickHitSound.isPlaying)
@@ -91,12 +151,12 @@ namespace Unity.Assets.Scripts.Objects
                 brickHitSound.Play();
             }
             */
-            
+
             // 체력(wave) 감소 및 시각적 업데이트
             // wave--;
                 // PhysicsBall 컴포넌트 참조 얻기
             PhysicsBall ball = collision.gameObject.GetComponent<PhysicsBall>();
-            
+
             // 현재 공의 공격력 (없으면 기본값 1 사용)
             int attackPower = ball != null ? ball.AttackPower : 1;
             
@@ -114,17 +174,44 @@ namespace Unity.Assets.Scripts.Objects
             // 체력이 0이 되면 벽돌 파괴
             if (wave <= 0)
             {
-                // 원래 wave 값에 따른 점수 추가
-                if (Managers.Game?.BrickGame != null)
-                {
-                    Managers.Game.BrickGame.AddScore(originalWave);
-                }
-                
+                // ✅ 원래 wave 값에 따른 점수 추가 (플레이어별)
+                AddScoreToPlayer(originalWave);
+
                 HandleBrickDestruction();
                 Destroy(gameObject);
             }
         }
         
+        /// <summary>
+        /// 플레이어별 점수 추가
+        /// </summary>
+        private void AddScoreToPlayer(int score)
+        {
+            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+            var networkManager = Unity.Netcode.NetworkManager.Singleton;
+
+            if (brickNetObj != null && networkManager != null && networkManager.IsListening)
+            {
+                // 멀티플레이어 모드: 해당 플레이어에게 점수 추가
+                ulong ownerClientId = brickNetObj.OwnerClientId;
+                var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
+
+                if (playerGame != null)
+                {
+                    playerGame.AddScore(score);
+                    GameLogger.Info("Brick", $"[Player {ownerClientId}] 점수 +{score}");
+                }
+            }
+            else
+            {
+                // 싱글플레이어 모드: 기본 BrickGame에 점수 추가
+                if (Managers.Game?.BrickGame != null)
+                {
+                    Managers.Game.BrickGame.AddScore(score);
+                }
+            }
+        }
+
         /// <summary>
         /// 벽돌이 파괴될 때 호출되는 로직
         /// </summary>

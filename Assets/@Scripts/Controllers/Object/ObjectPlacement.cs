@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using Unity.Netcode;
 
 public enum SpawnableObjectType
 {
@@ -17,6 +18,11 @@ public enum SpawnableObjectType
 /// </summary>
 public class ObjectPlacement : MonoBehaviour, IBrickPlacer
 {
+    // ✅ 플레이어별 게임을 위한 필드
+    private ulong _ownerClientId = 0; // 0 = 싱글플레이어 또는 공유 모드
+    private float _xOffset = 0f;      // 플레이어별 X축 오프셋
+    private bool _isMultiplayerMode = false;
+
     [Header("경계 참조")]
     [SerializeField] private Transform leftBorder;
     [SerializeField] private Transform rightBorder;
@@ -48,6 +54,23 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
         // ✅ Inspector 없이 자동 초기화
         AutoInitializeReferences();
         ValidatePrefabs();
+    }
+
+    /// <summary>
+    /// 멀티플레이어용 초기화 (플레이어별 ObjectPlacement 생성 시 호출)
+    /// </summary>
+    public void InitializeForPlayer(ulong clientId, float xOffset, Transform leftBound, Transform rightBound, Transform topBound)
+    {
+        _ownerClientId = clientId;
+        _xOffset = xOffset;
+        _isMultiplayerMode = true;
+
+        // 경계 설정
+        leftBorder = leftBound;
+        rightBorder = rightBound;
+        topBorder = topBound;
+
+        GameLogger.Success("ObjectPlacement", $"[Player {clientId}] 멀티플레이어 모드 초기화 완료 (xOffset: {xOffset})");
     }
 
     /// <summary>
@@ -104,26 +127,32 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
             }
         }
 
-        // 2. 프리팹 자동 로드 (Resources)
+        // 2. 프리팹 자동 로드 (Addressables via ResourceManager)
+        GameLogger.Info("ObjectPlacement", $"🔍 brick 프리팹 상태: {(brickPrefab == null ? "null" : $"이미 존재 ({brickPrefab.name})")}");
+
         if (brickPrefab == null)
         {
-            brickPrefab = Resources.Load<GameObject>("GameScene/Model/brick");
+            brickPrefab = Managers.Resource.Load<GameObject>("brick");
             if (brickPrefab != null)
             {
-                GameLogger.Success("ObjectPlacement", "brick 프리팹 자동 로드 완료");
+                GameLogger.Success("ObjectPlacement", "brick 프리팹 자동 로드 완료 (Addressables)");
             }
             else
             {
-                GameLogger.Error("ObjectPlacement", "brick 프리팹을 찾을 수 없습니다! @Resources/GameScene/Model/brick.prefab 확인");
+                GameLogger.Error("ObjectPlacement", "brick 프리팹을 찾을 수 없습니다! Addressables에 'brick' 등록 확인");
             }
+        }
+        else
+        {
+            GameLogger.Warning("ObjectPlacement", $"brick 프리팹이 이미 할당되어 있습니다: {brickPrefab.name}");
         }
 
         if (bonusBallPrefab == null)
         {
-            bonusBallPrefab = Resources.Load<GameObject>("GameScene/Model/bonusBall");
+            bonusBallPrefab = Managers.Resource.Load<GameObject>("bonusBall");
             if (bonusBallPrefab != null)
             {
-                GameLogger.Info("ObjectPlacement", "bonusBall 프리팹 자동 로드 완료");
+                GameLogger.Info("ObjectPlacement", "bonusBall 프리팹 자동 로드 완료 (Addressables)");
             }
             else
             {
@@ -133,10 +162,10 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
 
         if (starPrefab == null)
         {
-            starPrefab = Resources.Load<GameObject>("GameScene/Model/star");
+            starPrefab = Managers.Resource.Load<GameObject>("star");
             if (starPrefab != null)
             {
-                GameLogger.Info("ObjectPlacement", "star 프리팹 자동 로드 완료");
+                GameLogger.Info("ObjectPlacement", "star 프리팹 자동 로드 완료 (Addressables)");
             }
             else
             {
@@ -457,17 +486,49 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
         Vector3 spawnPosition = spawnInfo.SpawnPosition;
         float targetY = spawnInfo.TargetY;
         Vector3 objectScale = CalculateObjectScale(rightBorder.position.x - leftBorder.position.x);
-        
+
+        // ✅ 멀티플레이어 모드: xOffset 적용
+        if (_isMultiplayerMode)
+        {
+            spawnPosition.x += _xOffset;
+        }
+
         GameObject newObject = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity);
         newObject.transform.localScale = objectScale;
-        
+
+        // ✅ NetworkObject Spawn 처리 (멀티플레이어 동기화)
+        var networkObject = newObject.GetComponent<NetworkObject>();
+        if (networkObject != null)
+        {
+            var networkManager = NetworkManager.Singleton;
+            if (networkManager != null && networkManager.IsServer)
+            {
+                if (_isMultiplayerMode)
+                {
+                    // 멀티플레이어: Owner 지정
+                    networkObject.SpawnWithOwnership(_ownerClientId);
+                    GameLogger.Success("ObjectPlacement", $"[Player {_ownerClientId}] NetworkObject Spawn 완료: {newObject.name}");
+                }
+                else
+                {
+                    // 싱글플레이어: 일반 Spawn
+                    networkObject.Spawn();
+                    GameLogger.Success("ObjectPlacement", $"NetworkObject Spawn 완료: {newObject.name}");
+                }
+            }
+        }
+        else
+        {
+            GameLogger.Warning("ObjectPlacement", $"NetworkObject 컴포넌트가 없습니다: {prefabToSpawn.name} (싱글플레이어 모드)");
+        }
+
         SetupRigidbody(newObject);
-        
+
         if (!activeObjectData.ContainsKey(newObject))
         {
             activeObjectData.Add(newObject, true);
         }
-        
+
         StartCoroutine(MoveObjectToTargetY(newObject, targetY));
     }
     

@@ -26,7 +26,14 @@ namespace MB.Infrastructure.Messages
         Input_CameraTopView,      // T키 카메라
         Input_RhythmGameStart,    // Space키 리듬게임 시작
         Input_RhythmGameSkip,     // Tab키 리듬게임 스킵
-        Input_RhythmGameExit      // Esc키 리듬게임 종료
+        Input_RhythmGameExit,     // Esc키 리듬게임 종료
+
+        // ✅ BrickGame 이벤트 (멀티플레이어 동기화)
+        BrickGame_ScoreChanged,      // 점수 변경 (네트워크 동기화 필수)
+        BrickGame_LevelUp,           // 레벨업 (네트워크 동기화 필수)
+        BrickGame_GameStateChanged,  // 게임 상태 변경 (Playing, Paused, GameOver 등)
+        BrickGame_RowSpawned,        // 새 행 생성됨
+        BrickGame_BrickDestroyed     // 벽돌 파괴됨
     }
 
     public interface IActionPayload { }
@@ -42,10 +49,65 @@ namespace MB.Infrastructure.Messages
     public readonly struct ArrowKeyPayload : IActionPayload
     {
         public float Horizontal { get; }
-        
+
         public ArrowKeyPayload(float horizontal)
         {
             Horizontal = horizontal;
+        }
+    }
+
+    // ✅ BrickGame 관련 Payload 타입들
+    /// <summary>
+    /// 점수 변경 (점수 + 레벨 정보)
+    /// </summary>
+    public readonly struct BrickGameScorePayload : IActionPayload
+    {
+        public int Score { get; }
+        public int Level { get; }
+
+        public BrickGameScorePayload(int score, int level)
+        {
+            Score = score;
+            Level = level;
+        }
+    }
+
+    /// <summary>
+    /// 레벨업 (새 레벨 정보)
+    /// </summary>
+    public readonly struct BrickGameLevelPayload : IActionPayload
+    {
+        public int Level { get; }
+
+        public BrickGameLevelPayload(int level)
+        {
+            Level = level;
+        }
+    }
+
+    /// <summary>
+    /// 게임 상태 변경 (GamePhase enum)
+    /// </summary>
+    public readonly struct BrickGameStatePayload : IActionPayload
+    {
+        public GamePhase Phase { get; }
+
+        public BrickGameStatePayload(GamePhase phase)
+        {
+            Phase = phase;
+        }
+    }
+
+    /// <summary>
+    /// 벽돌 파괴 (점수 획득)
+    /// </summary>
+    public readonly struct BrickGameBrickDestroyedPayload : IActionPayload
+    {
+        public int ScoreValue { get; }
+
+        public BrickGameBrickDestroyedPayload(int scoreValue)
+        {
+            ScoreValue = scoreValue;
         }
     }
     public readonly struct ActionMessage

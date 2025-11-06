@@ -22,6 +22,7 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     // 경계 Transform (코드로 찾기)
     private Transform _leftBoundary;
     private Transform _rightBoundary;
+    private Transform _topBoundary;
     #endregion
 
     #region 플레이어 추적
@@ -32,58 +33,51 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         public GameObject Ball;
         public GameObject Plank;
         public int PlayerIndex;
+        public ObjectPlacement ObjectPlacement; // ✅ 플레이어별 ObjectPlacement
     }
     #endregion
 
     void Start()
     {
-        // 프리팹 자동 로드 (Resources 폴더에서)
-        LoadPrefabs();
-
-        // 카메라 찾기
-        _mainCamera = Camera.main;
-        if (_mainCamera == null)
+        // ✅ 수동 Spawn (NetworkObject가 자동 Spawn 안 될 경우)
+        var networkObject = GetComponent<NetworkObject>();
+        if (networkObject != null && !networkObject.IsSpawned)
         {
-            GameLogger.Error("BrickGameMultiplayerSpawner", "Main Camera를 찾을 수 없습니다!");
+            var networkManager = NetworkManager.Singleton;
+            if (networkManager != null && networkManager.IsListening && networkManager.IsServer)
+            {
+                networkObject.Spawn();
+                GameLogger.Success("BrickGameMultiplayerSpawner", "수동 Spawn 완료");
+            }
         }
-
-        // 경계 찾기 (Scene에서)
-        FindBoundaries();
     }
 
     /// <summary>
-    /// Prefab 자동 로드 (Resources 또는 Addressables)
+    /// Prefab 자동 로드 (ResourceManager에서 가져오기)
     /// </summary>
     private void LoadPrefabs()
     {
-        // Resources/GameScene/Model/ball.prefab
-        _ballPrefab = Resources.Load<GameObject>("GameScene/Model/ball");
+        // ✅ ResourceManager에서 로드 (Address 이름: "ball")
+        _ballPrefab = Managers.Resource.Load<GameObject>("ball");
         if (_ballPrefab == null)
         {
-            GameLogger.Error("BrickGameMultiplayerSpawner", "ball 프리팹을 찾을 수 없습니다! Resources/GameScene/Model/ball.prefab 확인");
+            GameLogger.Error("BrickGameMultiplayerSpawner", "ball 프리팹을 찾을 수 없습니다!");
         }
         else
         {
             GameLogger.Success("BrickGameMultiplayerSpawner", $"Ball 프리팹 로드 완료: {_ballPrefab.name}");
         }
 
-        // Plank는 씬에서 찾거나 프리팹으로 생성
-        // 방법 1: 씬의 기존 Plank를 복제
+        // ✅ Plank 로드 - 씬에서 찾기 (프리팹 없을 수 있음)
         PhysicsPlank existingPlank = FindObjectOfType<PhysicsPlank>();
         if (existingPlank != null)
         {
-            // 기존 Plank를 프리팹화 (런타임에 복제용)
             _plankPrefab = existingPlank.gameObject;
-            GameLogger.Success("BrickGameMultiplayerSpawner", $"Plank 원본 발견: {_plankPrefab.name}");
+            GameLogger.Success("BrickGameMultiplayerSpawner", $"Plank 템플릿 발견: {_plankPrefab.name}");
         }
         else
         {
-            GameLogger.Warning("BrickGameMultiplayerSpawner", "씬에서 PhysicsPlank를 찾을 수 없습니다. Resources에서 로드 시도...");
-            _plankPrefab = Resources.Load<GameObject>("GameScene/Plank");
-            if (_plankPrefab == null)
-            {
-                GameLogger.Error("BrickGameMultiplayerSpawner", "Plank 프리팹을 찾을 수 없습니다!");
-            }
+            GameLogger.Error("BrickGameMultiplayerSpawner", "씬에서 PhysicsPlank를 찾을 수 없습니다!");
         }
     }
 
@@ -92,9 +86,10 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     /// </summary>
     private void FindBoundaries()
     {
-        // "LeftEnd", "RightEnd" GameObject 찾기 (BrickGame 씬 구조)
+        // "LeftEnd", "RightEnd", "TopBorder" GameObject 찾기 (BrickGame 씬 구조)
         _leftBoundary = GameObject.Find("LeftEnd")?.transform;
         _rightBoundary = GameObject.Find("RightEnd")?.transform;
+        _topBoundary = GameObject.Find("TopBorder")?.transform;
 
         if (_leftBoundary == null || _rightBoundary == null)
         {
@@ -108,11 +103,37 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             right.transform.position = new Vector3(8f, _plankYPosition, 0);
             _rightBoundary = right.transform;
         }
+
+        if (_topBoundary == null)
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", "TopBorder를 찾을 수 없습니다. 기본값 사용");
+            var top = new GameObject("TopBorder_Auto");
+            top.transform.position = new Vector3(0, 4f, 0);
+            _topBoundary = top.transform;
+        }
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+
+        // ✅ 경계 및 카메라 초기화 (ObjectPlacement 생성 전에 필요)
+        if (_mainCamera == null)
+        {
+            _mainCamera = Camera.main;
+            if (_mainCamera == null)
+            {
+                GameLogger.Error("BrickGameMultiplayerSpawner", "Main Camera를 찾을 수 없습니다!");
+            }
+        }
+
+        if (_leftBoundary == null || _rightBoundary == null)
+        {
+            FindBoundaries();
+        }
+
+        // ✅ 프리팹 로드 (Addressables 로드 완료 후)
+        LoadPrefabs();
 
         if (IsServer)
         {
@@ -121,6 +142,15 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
             GameLogger.Success("BrickGameMultiplayerSpawner", "서버 모드 - 클라이언트 연결 대기 중");
+
+            // ✅ 씬 전환 후 이미 연결된 클라이언트들 초기화
+            // (로비에서 연결된 후 GameScene으로 넘어온 경우, 이미 지나간 OnClientConnected 이벤트를 놓쳤으므로)
+            GameLogger.Info("BrickGameMultiplayerSpawner", $"이미 연결된 클라이언트 수: {NetworkManager.ConnectedClientsIds.Count}");
+            foreach (var clientId in NetworkManager.ConnectedClientsIds)
+            {
+                GameLogger.Info("BrickGameMultiplayerSpawner", $"[씬 전환 후] 클라이언트 {clientId} 초기화 시작");
+                OnClientConnected(clientId);
+            }
         }
     }
 
@@ -152,13 +182,43 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         // 2. Ball 생성
         GameObject ballObject = SpawnBallForPlayer(clientId, playerIndex, plankObject);
 
-        // 3. 플레이어 오브젝트 추적
+        // 3. ObjectPlacement 생성 (플레이어별 벽돌 영역)
+        ObjectPlacement objectPlacement = CreateObjectPlacementForPlayer(clientId, playerIndex);
+
+        // 4. 플레이어 오브젝트 추적
         _playerObjects[clientId] = new PlayerObjects
         {
             Ball = ballObject,
             Plank = plankObject,
-            PlayerIndex = playerIndex
+            PlayerIndex = playerIndex,
+            ObjectPlacement = objectPlacement
         };
+
+        // ✅ 5. 플레이어별 BrickGameManager 생성
+        PhysicsPlank plank = plankObject.GetComponent<PhysicsPlank>();
+        if (plank != null)
+        {
+            Managers.Game.InitializePlayerGame(
+                clientId,
+                objectPlacement,  // ✅ 플레이어별 ObjectPlacement 전달
+                plank,
+                _mainCamera,
+                null              // 기본 설정 사용
+            );
+            GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] BrickGameManager 생성 완료!");
+
+            // ✅ 6. 게임 시작 (벽돌 생성)
+            var playerGame = Managers.Game.GetPlayerGame(clientId);
+            if (playerGame != null)
+            {
+                playerGame.StartGame();
+                GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] 게임 시작 및 벽돌 생성 완료!");
+            }
+        }
+        else
+        {
+            GameLogger.Error("BrickGameMultiplayerSpawner", $"[Player {clientId}] PhysicsPlank 컴포넌트를 찾을 수 없습니다!");
+        }
 
         GameLogger.Success("BrickGameMultiplayerSpawner", $"✅ 플레이어 {clientId} 스폰 완료 (Index: {playerIndex})");
     }
@@ -275,6 +335,60 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     }
 
     /// <summary>
+    /// 플레이어별 ObjectPlacement 생성 (벽돌 생성 담당)
+    /// </summary>
+    private ObjectPlacement CreateObjectPlacementForPlayer(ulong clientId, int playerIndex)
+    {
+        // 1. 새 GameObject 생성
+        GameObject placementObj = new GameObject($"ObjectPlacement_Player{clientId}");
+
+        // 2. ObjectPlacement 컴포넌트 추가
+        ObjectPlacement placement = placementObj.AddComponent<ObjectPlacement>();
+
+        // 3. xOffset 계산 (플레이어별 영역 분리)
+        float xOffset = CalculatePlayerXOffset(playerIndex);
+
+        // 4. 플레이어별 경계 설정 (기존 경계 사용)
+        placement.InitializeForPlayer(
+            clientId,
+            xOffset,
+            _leftBoundary,
+            _rightBoundary,
+            _topBoundary
+        );
+
+        GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] ObjectPlacement 생성 완료 (xOffset: {xOffset})");
+
+        return placement;
+    }
+
+    /// <summary>
+    /// 플레이어별 X 오프셋 계산 (벽돌 영역 분리)
+    /// CalculatePlayerXPosition()과 동일한 로직 사용하여 Plank와 벽돌 영역 일치
+    /// </summary>
+    private float CalculatePlayerXOffset(int playerIndex)
+    {
+        int totalPlayers = _playerObjects.Count + 1;
+
+        if (totalPlayers == 1)
+        {
+            return 0; // 1인: 중앙
+        }
+        else if (totalPlayers == 2)
+        {
+            // Plank 위치와 동일하게 _plankSpacing 사용
+            return playerIndex == 0 ? -_plankSpacing : _plankSpacing;
+        }
+        else
+        {
+            // 3인 이상: Plank 위치와 동일한 로직
+            float totalWidth = _plankSpacing * (totalPlayers - 1);
+            float startX = -totalWidth / 2f;
+            return startX + (playerIndex * _plankSpacing);
+        }
+    }
+
+    /// <summary>
     /// 플레이어 X 위치 계산 (플레이어 인덱스 기반)
     /// </summary>
     private float CalculatePlayerXPosition(int playerIndex)
@@ -332,7 +446,16 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
                 Destroy(objects.Plank);
             }
 
+            // ObjectPlacement 제거
+            if (objects.ObjectPlacement != null)
+            {
+                Destroy(objects.ObjectPlacement.gameObject);
+            }
+
             _playerObjects.Remove(clientId);
+
+            // ✅ 플레이어 BrickGameManager 정리
+            Managers.Game.CleanupPlayerGame(clientId);
 
             GameLogger.Warning("BrickGameMultiplayerSpawner", $"🔌 플레이어 {clientId} 연결 해제 - 오브젝트 제거됨");
         }

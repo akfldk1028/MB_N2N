@@ -125,10 +125,23 @@ public class BrickGameInitializer
     #region Dependency Injection
     private void InjectDependencies(SceneObjects objects)
     {
+        // ✅ Server Authority: Client는 ObjectPlacement 없이 초기화
+        var networkManager = Unity.Netcode.NetworkManager.Singleton;
+
+        if (networkManager != null && networkManager.IsListening)
+        {
+            // 🎮 멀티플레이어 모드: BrickGameMultiplayerSpawner가 플레이어별 게임 생성
+            GameLogger.Info("BrickGameInitializer", "[Multiplayer] 단일 BrickGame 생성 스킵 - BrickGameMultiplayerSpawner가 플레이어별 게임 생성");
+            return; // 단일 BrickGame 생성하지 않음
+        }
+
+        // 싱글플레이어 모드: 단일 BrickGame 생성
+        IBrickPlacer brickPlacer = objects.ObjectPlacement;
+        GameLogger.Success("BrickGameInitializer", "[Singleplayer] ObjectPlacement 전달");
+
         // GameManager 초기화 호출
-        // Client도 동일하게 초기화하되, BrickGameManager.OnUpdate()에서 IsServer 체크
         Managers.Game.InitializeBrickGame(
-            objects.ObjectPlacement,  // Client도 받지만 사용 안 함 (OnUpdate에서 체크)
+            brickPlacer,
             objects.Plank,
             objects.MainCamera,
             null  // 기본 설정 사용

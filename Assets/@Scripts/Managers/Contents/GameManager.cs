@@ -23,11 +23,15 @@ using Random = UnityEngine.Random;
 
 public class GameManager
 {
-	// BrickGameManager 참조 (Non-MonoBehaviour)
+	// ✅ 단일 BrickGameManager (하위 호환 - Server용 또는 싱글플레이어용)
 	private BrickGameManager _brickGame = new BrickGameManager();
 	private System.IDisposable _brickGameUpdateSubscription;
 
 	public BrickGameManager BrickGame => _brickGame;
+
+	// ✅ 플레이어별 BrickGameManager (멀티플레이어 경쟁 모드)
+	private Dictionary<ulong, BrickGameManager> _playerGames = new Dictionary<ulong, BrickGameManager>();
+	private Dictionary<ulong, System.IDisposable> _playerGameSubscriptions = new Dictionary<ulong, System.IDisposable>();
 
 	public GameManager()
 	{
@@ -68,6 +72,89 @@ public class GameManager
 
 		GameLogger.Info("GameManager", "BrickGame 정리 완료 (Update 구독 해제)");
 	}
+
+	#region 플레이어별 BrickGame 관리 (멀티플레이어 경쟁 모드)
+
+	/// <summary>
+	/// 플레이어별 BrickGame 초기화
+	/// </summary>
+	public void InitializePlayerGame(
+		ulong clientId,
+		IBrickPlacer brickPlacer,
+		PhysicsPlank plank,
+		Camera mainCamera,
+		BrickGameSettings settings)
+	{
+		GameLogger.Progress("GameManager", $"[Player {clientId}] BrickGame 초기화 시작...");
+
+		// 이미 존재하면 정리
+		if (_playerGames.ContainsKey(clientId))
+		{
+			CleanupPlayerGame(clientId);
+		}
+
+		// 새 BrickGameManager 생성
+		var playerGame = new BrickGameManager();
+		playerGame.Initialize(brickPlacer, plank, mainCamera, settings);
+
+		// ActionBus에 Update 구독
+		var subscription = Managers.Subscribe(
+			MB.Infrastructure.Messages.ActionId.System_Update,
+			playerGame.OnUpdate
+		);
+
+		// Dictionary에 저장
+		_playerGames[clientId] = playerGame;
+		_playerGameSubscriptions[clientId] = subscription;
+
+		GameLogger.Success("GameManager", $"[Player {clientId}] BrickGame 초기화 완료!");
+	}
+
+	/// <summary>
+	/// 플레이어별 BrickGame 정리
+	/// </summary>
+	public void CleanupPlayerGame(ulong clientId)
+	{
+		if (_playerGameSubscriptions.TryGetValue(clientId, out var subscription))
+		{
+			subscription?.Dispose();
+			_playerGameSubscriptions.Remove(clientId);
+		}
+
+		if (_playerGames.Remove(clientId))
+		{
+			GameLogger.Info("GameManager", $"[Player {clientId}] BrickGame 정리 완료");
+		}
+	}
+
+	/// <summary>
+	/// 플레이어별 BrickGame 가져오기
+	/// </summary>
+	public BrickGameManager GetPlayerGame(ulong clientId)
+	{
+		if (_playerGames.TryGetValue(clientId, out var game))
+		{
+			return game;
+		}
+
+		GameLogger.Warning("GameManager", $"[Player {clientId}] BrickGame이 존재하지 않습니다!");
+		return null;
+	}
+
+	/// <summary>
+	/// 모든 플레이어 게임 정리
+	/// </summary>
+	public void CleanupAllPlayerGames()
+	{
+		foreach (var clientId in _playerGames.Keys.ToList())
+		{
+			CleanupPlayerGame(clientId);
+		}
+
+		GameLogger.Info("GameManager", "모든 플레이어 BrickGame 정리 완료");
+	}
+
+	#endregion
 
 
 

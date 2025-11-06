@@ -196,6 +196,10 @@ public class PhysicsPlank : PhysicsObject
         {
             // Owner: 초기 위치 동기화
             _syncedPosition.Value = transform.position;
+
+            // ✅ BrickGameManager 초기화는 BrickGameMultiplayerSpawner가 담당
+            // (Server에서 통합 관리 - ObjectPlacement와 함께 생성)
+            GameLogger.Info("PhysicsPlank", $"[Player {OwnerClientId}] Plank Owner 초기화 완료");
         }
         else
         {

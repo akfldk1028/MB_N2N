@@ -10,11 +10,59 @@ public class BrickGameManager
     #region 의존성 (Dependency Injection)
     private IBrickPlacer _brickPlacer;
     private Unity.Netcode.NetworkManager _networkManager;
+    private BrickGameNetworkSync _networkSync;
     #endregion
 
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
+    #endregion
+
+    #region Network 접근 (Managers.Game.BrickGame.Network)
+    /// <summary>
+    /// 멀티플레이어 네트워크 동기화 매니저
+    /// Managers.Game.BrickGame.Network로 접근
+    /// </summary>
+    public BrickGameNetworkSync Network => _networkSync;
+
+    /// <summary>
+    /// 동기화된 점수 (멀티플레이어에서는 NetworkSync 우선)
+    /// </summary>
+    public int Score
+    {
+        get
+        {
+            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+                return _networkSync.Score;
+            return _state.CurrentScore;
+        }
+    }
+
+    /// <summary>
+    /// 동기화된 레벨 (멀티플레이어에서는 NetworkSync 우선)
+    /// </summary>
+    public int Level
+    {
+        get
+        {
+            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+                return _networkSync.Level;
+            return _state.CurrentLevel;
+        }
+    }
+
+    /// <summary>
+    /// 동기화된 게임 상태 (멀티플레이어에서는 NetworkSync 우선)
+    /// </summary>
+    public GamePhase Phase
+    {
+        get
+        {
+            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+                return _networkSync.Phase;
+            return _state.CurrentPhase;
+        }
+    }
     #endregion
     
     #region Sub-Managers
@@ -98,6 +146,18 @@ public class BrickGameManager
         _brickManager.Initialize();
 
         GameLogger.Success("BrickGameManager", "초기화 완료 (의존성 주입됨)");
+    }
+
+    /// <summary>
+    /// 멀티플레이어 네트워크 동기화 연결
+    /// GameScene에서 BrickGameNetworkSync를 찾아서 연결
+    /// </summary>
+    public void ConnectNetworkSync(BrickGameNetworkSync networkSync)
+    {
+        _networkSync = networkSync;
+        _networkSync.Initialize(this);
+
+        GameLogger.Success("BrickGameManager", "BrickGameNetworkSync 연결 완료!");
     }
     #endregion
     

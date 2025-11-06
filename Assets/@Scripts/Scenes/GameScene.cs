@@ -36,9 +36,22 @@ public class GameScene : BaseScene
 
 		if (initializer.Initialize())
 		{
-			// 게임 시작 (공 준비 상태로 전환)
-			Managers.Game.BrickGame?.StartGame();
-			GameLogger.Success("GameScene", "BrickGame 초기화 및 시작 완료!");
+			// 멀티플레이어 모드 확인
+			var networkManager = Unity.Netcode.NetworkManager.Singleton;
+			bool isMultiplayer = networkManager != null && networkManager.IsListening;
+
+			if (!isMultiplayer)
+			{
+				// 싱글플레이어: 네트워크 동기화 연결 및 게임 시작
+				ConnectNetworkSync();
+				Managers.Game.BrickGame?.StartGame();
+				GameLogger.Success("GameScene", "BrickGame 초기화 및 시작 완료!");
+			}
+			else
+			{
+				// 멀티플레이어: BrickGameMultiplayerSpawner가 플레이어별 게임 시작
+				GameLogger.Success("GameScene", "[Multiplayer] 플레이어별 게임은 BrickGameMultiplayerSpawner가 관리");
+			}
 		}
 		else
 		{
@@ -46,10 +59,52 @@ public class GameScene : BaseScene
 		}
 	}
 
+	/// <summary>
+	/// BrickGameNetworkSync 찾아서 BrickGameManager에 연결
+	/// </summary>
+	private void ConnectNetworkSync()
+	{
+		var networkSync = FindObjectOfType<BrickGameNetworkSync>();
+
+		if (networkSync != null)
+		{
+			Managers.Game.BrickGame.ConnectNetworkSync(networkSync);
+			GameLogger.Success("GameScene", "BrickGameNetworkSync 연결 완료");
+		}
+		else
+		{
+			GameLogger.Warning("GameScene", "BrickGameNetworkSync를 찾을 수 없습니다 (싱글플레이어 모드)");
+		}
+	}
+
+	// ✅ 매 프레임 입력 처리 (방향키를 ActionBus에 발행)
+	private void Update()
+	{
+		// 방향키 입력 받기
+		float horizontal = Input.GetAxisRaw("Horizontal"); // A/D 또는 Left/Right Arrow
+
+		// ActionBus에 Input_ArrowKey 발행 (0 포함 - 키를 뗐을 때도 발행)
+		var payload = new MB.Infrastructure.Messages.ArrowKeyPayload(horizontal);
+		Managers.PublishAction(MB.Infrastructure.Messages.ActionId.Input_ArrowKey, payload);
+	}
+
 	public override void Clear()
 	{
-		// BrickGame 정리 (ActionBus 구독 해제)
-		Managers.Game?.CleanupBrickGame();
-		GameLogger.Info("GameScene", "GameScene 정리 완료");
+		// 멀티플레이어 모드 확인
+		var networkManager = Unity.Netcode.NetworkManager.Singleton;
+		bool isMultiplayer = networkManager != null && networkManager.IsListening;
+
+		if (isMultiplayer)
+		{
+			// 멀티플레이어: 모든 플레이어 게임 정리
+			Managers.Game?.CleanupAllPlayerGames();
+			GameLogger.Info("GameScene", "GameScene 정리 완료 (멀티플레이어 - 모든 플레이어 게임 정리됨)");
+		}
+		else
+		{
+			// 싱글플레이어: 단일 BrickGame 정리
+			Managers.Game?.CleanupBrickGame();
+			GameLogger.Info("GameScene", "GameScene 정리 완료 (싱글플레이어)");
+		}
 	}
 }
