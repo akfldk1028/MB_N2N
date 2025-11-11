@@ -1,15 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(move BrickGameManager_Old.cs BrickGameManager.cs)",
-      "Bash(powershell:*)",
-      "mcp__sequential-thinking__sequentialthinking",
-      "mcp__memory__create_entities",
-      "mcp__memory__create_relations",
-      "mcp__memory__add_observations",
-      "mcp__context7__resolve-library-id",
-      "mcp__context7__get-library-docs",
-      "Bash(nul)"
+      "Bash(Select-Object -First 30)"
     ],
     "deny": [],
     "ask": []

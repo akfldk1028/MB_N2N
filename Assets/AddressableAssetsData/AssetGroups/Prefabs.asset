@@ -14,7 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_GroupName: Prefabs
   m_GUID: 8b6f37a6951c9e246bb403b67ba11597
-  m_SerializeEntries: []
+  m_SerializeEntries:
+  - m_GUID: f6a11175ad99d4c4389c7263ff8ba04a
+    m_Address: Assets/@Scenes/StartUp.unity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 3b34cd1d0f58d714b8b4fcf9c86bdbb4, type: 2}
   m_SchemaSet:

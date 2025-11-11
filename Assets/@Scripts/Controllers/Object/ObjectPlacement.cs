@@ -23,6 +23,9 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
     private float _xOffset = 0f;      // 플레이어별 X축 오프셋
     private bool _isMultiplayerMode = false;
 
+    // ✅ 플레이어별 독립적인 난수 생성기
+    private System.Random _random;
+
     [Header("경계 참조")]
     [SerializeField] private Transform leftBorder;
     [SerializeField] private Transform rightBorder;
@@ -65,12 +68,18 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
         _xOffset = xOffset;
         _isMultiplayerMode = true;
 
+        // ✅ 플레이어별 독립적인 난수 생성기 초기화
+        int seed = ((int)clientId * 1000) + System.DateTime.Now.Millisecond;
+        _random = new System.Random(seed);
+        GameLogger.Success("ObjectPlacement", $"[Player {clientId}] Random Seed 초기화: {seed}");
+
         // 경계 설정
         leftBorder = leftBound;
         rightBorder = rightBound;
         topBorder = topBound;
 
-        GameLogger.Success("ObjectPlacement", $"[Player {clientId}] 멀티플레이어 모드 초기화 완료 (xOffset: {xOffset})");
+        GameLogger.Success("ObjectPlacement", $"[Player {clientId}] 경계: Left={leftBound.position.x}, Right={rightBound.position.x}, xOffset={xOffset}");
+        GameLogger.Success("ObjectPlacement", $"[Player {clientId}] 실제 블록 영역: X = {leftBound.position.x + xOffset} ~ {rightBound.position.x + xOffset}");
     }
 
     /// <summary>
@@ -273,13 +282,12 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     }
     private void ShuffleSpawnPositions(List<PotentialSpawnInfo> potentialSpawns)
     {
-        System.Random rng = new System.Random();
         int n = potentialSpawns.Count;
-        
+
         while (n > 1)
         {
             n--;
-            int k = rng.Next(n + 1);
+            int k = _random.Next(n + 1);
             PotentialSpawnInfo value = potentialSpawns[k];
             potentialSpawns[k] = potentialSpawns[n];
             potentialSpawns[n] = value;
@@ -290,17 +298,17 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     {
         // 총 가능한 위치 중에서 실제로 생성할 오브젝트 수를 계산
         // 채우기 비율에 따라 자동으로 개수 결정
-        float fillRate = Random.Range(fillRateMin, fillRateMax);
+        float fillRate = (float)(_random.NextDouble() * (fillRateMax - fillRateMin) + fillRateMin);
         int objectsToSpawnCount = Mathf.FloorToInt(potentialSpawns.Count * fillRate);
-        
+
         // 최소 하나는 생성되도록
         objectsToSpawnCount = Mathf.Max(1, objectsToSpawnCount);
-        
+
         for (int i = 0; i < objectsToSpawnCount && i < potentialSpawns.Count; i++)
         {
             PotentialSpawnInfo spawnInfo = potentialSpawns[i];
             SpawnableObjectType objectType = DetermineRandomObjectType();
-            
+
             GameObject prefabToSpawn = GetPrefabForType(objectType);
             if (prefabToSpawn != null)
             {
@@ -311,8 +319,8 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     
     private SpawnableObjectType DetermineRandomObjectType()
     {
-        int randomType = Random.Range(0, 20);
-        
+        int randomType = _random.Next(0, 20);
+
         if (randomType == 0) return SpawnableObjectType.BonusBall;
         if (randomType == 1) return SpawnableObjectType.Star;
         return SpawnableObjectType.Brick;
@@ -322,10 +330,10 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     private List<PotentialSpawnInfo> GeneratePatternWithRandomGaps(List<PotentialSpawnInfo> allPositions)
     {
         List<PotentialSpawnInfo> patternPositions = new List<PotentialSpawnInfo>();
-        
+
         // 기본 격자에서 랜덤 패턴 생성 - 여러 가지 패턴 유형 중 하나 선택
-        int patternType = Random.Range(0, 5);
-        
+        int patternType = _random.Next(0, 5);
+
         switch (patternType)
         {
             case 0: // 체스보드 패턴
@@ -345,7 +353,7 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
                 CreateFullRandomPattern(allPositions, patternPositions);
                 break;
         }
-        
+
         return patternPositions;
     }
     
@@ -375,10 +383,11 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     private void CreateRandomHolesPattern(List<PotentialSpawnInfo> allPositions, List<PotentialSpawnInfo> patternPositions)
     {
         // 각 위치마다 일정 확률로 포함
+        float threshold = (float)(_random.NextDouble() * 0.2 + 0.6); // 0.6~0.8
         foreach (var position in allPositions)
         {
             // 60~80% 확률로 포함
-            if (Random.value < Random.Range(0.6f, 0.8f))
+            if (_random.NextDouble() < threshold)
             {
                 patternPositions.Add(position);
             }
@@ -413,24 +422,30 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
         int totalPositions = allPositions.Count;
         int columnsCount = Mathf.FloorToInt(Mathf.Sqrt(totalPositions / numberOfRowsToSpawn));
         int rowsCount = numberOfRowsToSpawn;
-        
+
         // 클러스터 크기 (2x2 또는 3x3)
-        int clusterSize = Random.Range(0, 2) == 0 ? 2 : 3;
-        
+        int clusterSize = _random.Next(0, 2) == 0 ? 2 : 3;
+
+        // 클러스터별 포함 여부 미리 계산
+        Dictionary<int, bool> clusterInclusion = new Dictionary<int, bool>();
+
         for (int i = 0; i < allPositions.Count; i++)
         {
             int row = i / columnsCount;
             int col = i % columnsCount;
-            
+
             // 클러스터 ID 계산 (어느 클러스터에 속하는지)
             int clusterRow = row / clusterSize;
             int clusterCol = col / clusterSize;
-            
-            // 각 클러스터마다 일정 확률로 포함 여부 결정
-            int clusterID = clusterRow * 1000 + clusterCol; // 유니크한 클러스터 ID 생성
-            Random.InitState(clusterID); // 같은 클러스터는 같은 결정을 하도록 시드 설정
-            
-            if (Random.value < 0.7f) // 70% 확률로 클러스터 포함
+            int clusterID = clusterRow * 1000 + clusterCol;
+
+            // 각 클러스터마다 한 번만 결정
+            if (!clusterInclusion.ContainsKey(clusterID))
+            {
+                clusterInclusion[clusterID] = _random.NextDouble() < 0.7; // 70% 확률
+            }
+
+            if (clusterInclusion[clusterID])
             {
                 patternPositions.Add(allPositions[i]);
             }
@@ -443,12 +458,12 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
         // 각 위치마다 개별적으로 포함 여부 결정
         foreach (var position in allPositions)
         {
-            if (Random.value < 0.5f) // 50% 확률로 포함
+            if (_random.NextDouble() < 0.5) // 50% 확률로 포함
             {
                 patternPositions.Add(position);
             }
         }
-        
+
         // 너무 적게 선택되면 추가
         if (patternPositions.Count < allPositions.Count * 0.3f)
         {
@@ -456,7 +471,7 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
             List<PotentialSpawnInfo> remainingPositions = allPositions
                 .Except(patternPositions)
                 .ToList();
-                
+
             // 셔플하고 필요한 만큼 추가
             ShuffleList(remainingPositions);
             for (int i = 0; i < additionalNeeded && i < remainingPositions.Count; i++)
@@ -469,12 +484,11 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     // 리스트 셔플 헬퍼 메서드
     private void ShuffleList<T>(List<T> list)
     {
-        System.Random rng = new System.Random();
         int n = list.Count;
         while (n > 1)
         {
             n--;
-            int k = rng.Next(n + 1);
+            int k = _random.Next(n + 1);
             T value = list[k];
             list[k] = list[n];
             list[n] = value;
@@ -648,14 +662,22 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     // 지정된 수의 행을 생성하는 메서드
     public void PlaceMultipleRows(int rowCount)
     {
-        GameLogger.Success("ObjectPlacement", $"✅ PlaceMultipleRows({rowCount}) 호출됨!");
+        // ✅ 싱글플레이어 모드일 경우 Random 초기화
+        if (_random == null)
+        {
+            _random = new System.Random(Time.frameCount);
+            GameLogger.Warning("ObjectPlacement", $"싱글플레이어 모드 - Random 초기화 (Seed: {Time.frameCount})");
+        }
+
+        GameLogger.Success("ObjectPlacement", $"✅ PlaceMultipleRows({rowCount}) 호출됨! [Player {_ownerClientId}]");
+
         MoveDownAllObjects();
-        
+
         // 지정된 행 수로 위치 계산
         List<PotentialSpawnInfo> potentialSpawns = CalculatePotentialSpawnPositions(rowCount);
-        
+
         // 두 가지 방식으로 랜덤 패턴 생성
-        if (Random.value < 0.5f)
+        if (_random.NextDouble() < 0.5)
         {
             // 방식 1: 패턴 기반 생성 (체스보드, 지그재그 등)
             List<PotentialSpawnInfo> patternPositions = GeneratePatternWithRandomGaps(potentialSpawns);

@@ -14,6 +14,10 @@ public class GameScene : BaseScene
 
 		SceneType = EScene.GameScene;
 
+		// ✅ CameraManager 초기화를 여기서 먼저 수행 (BrickGameMultiplayerSpawner.OnNetworkSpawn보다 먼저)
+		Managers.Camera.Initialize();
+		GameLogger.Success("GameScene", "CameraManager 초기화 완료");
+
 		GameLogger.Success("GameScene", "GameScene Init 완료 (BrickGame은 Start에서 초기화)");
 		return true;
 	}
@@ -98,12 +102,14 @@ public class GameScene : BaseScene
 		{
 			// 멀티플레이어: 모든 플레이어 게임 정리
 			Managers.Game?.CleanupAllPlayerGames();
+			Managers.Camera?.ResetViewports();  // Viewport만 초기화
 			GameLogger.Info("GameScene", "GameScene 정리 완료 (멀티플레이어 - 모든 플레이어 게임 정리됨)");
 		}
 		else
 		{
 			// 싱글플레이어: 단일 BrickGame 정리
 			Managers.Game?.CleanupBrickGame();
+			Managers.Camera?.ResetViewports();  // Viewport만 초기화
 			GameLogger.Info("GameScene", "GameScene 정리 완료 (싱글플레이어)");
 		}
 	}

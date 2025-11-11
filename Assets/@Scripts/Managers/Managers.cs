@@ -60,11 +60,13 @@ public class Managers : MonoBehaviour
     private ObjectManager _object = new ObjectManager();
     private MapManager _map = new MapManager();
     private GameModeService _gameMode = new GameModeService();
+    private CameraManager _camera = new CameraManager();
 
     public static GameManager Game { get { return Instance?._game; } }
     public static ObjectManager Object { get { return Instance?._object; } }
     public static MapManager Map { get { return Instance?._map; } }
     public static GameModeService GameMode { get { return Instance?._gameMode; } }
+    public static CameraManager Camera { get { return Instance?._camera; } }
     #endregion
 
     #region Core

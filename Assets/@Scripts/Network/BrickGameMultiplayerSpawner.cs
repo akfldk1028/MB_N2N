@@ -152,6 +152,12 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
                 OnClientConnected(clientId);
             }
         }
+
+        // ✅ Client-side: 카메라 설정 (Host 포함 모든 Client)
+        if (IsClient)
+        {
+            SetupClientSideCameras();
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -194,7 +200,8 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             ObjectPlacement = objectPlacement
         };
 
-        // ✅ 5. 플레이어별 BrickGameManager 생성
+        // ✅ 5. 플레이어별 BrickGameManager 생성 (Server-side)
+        // 카메라는 각 Client에서 설정하므로 여기서는 Main Camera 임시 사용
         PhysicsPlank plank = plankObject.GetComponent<PhysicsPlank>();
         if (plank != null)
         {
@@ -202,7 +209,7 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
                 clientId,
                 objectPlacement,  // ✅ 플레이어별 ObjectPlacement 전달
                 plank,
-                _mainCamera,
+                _mainCamera,      // 임시로 Main Camera 전달 (Client에서 각자 설정)
                 null              // 기본 설정 사용
             );
             GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] BrickGameManager 생성 완료!");
@@ -459,5 +466,31 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
 
             GameLogger.Warning("BrickGameMultiplayerSpawner", $"🔌 플레이어 {clientId} 연결 해제 - 오브젝트 제거됨");
         }
+    }
+
+    /// <summary>
+    /// Client-side 카메라 Viewport 설정 (OnNetworkSpawn에서 호출)
+    /// Host: Main(왼쪽) + Sub(오른쪽)
+    /// Client: Sub(왼쪽) + Main(오른쪽)
+    /// </summary>
+    private void SetupClientSideCameras()
+    {
+        var networkManager = NetworkManager.Singleton;
+        if (networkManager == null)
+        {
+            GameLogger.Error("BrickGameMultiplayerSpawner", "[Client] NetworkManager를 찾을 수 없습니다!");
+            return;
+        }
+
+        ulong localClientId = networkManager.LocalClientId;
+
+        GameLogger.Info("BrickGameMultiplayerSpawner",
+            $"[Client {localClientId}] 카메라 Viewport 설정 시작");
+
+        // CameraManager를 통해 Viewport만 조정
+        Managers.Camera.SetupViewportsForLocalPlayer(localClientId);
+
+        GameLogger.Success("BrickGameMultiplayerSpawner",
+            $"[Client {localClientId}] 카메라 Viewport 설정 완료!");
     }
 }
