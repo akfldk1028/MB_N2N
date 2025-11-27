@@ -33,7 +33,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_LevelUp,           // 레벨업 (네트워크 동기화 필수)
         BrickGame_GameStateChanged,  // 게임 상태 변경 (Playing, Paused, GameOver 등)
         BrickGame_RowSpawned,        // 새 행 생성됨
-        BrickGame_BrickDestroyed     // 벽돌 파괴됨
+        BrickGame_BrickDestroyed,    // 벽돌 파괴됨
+        BrickGame_TerritoryChanged   // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
     }
 
     public interface IActionPayload { }

@@ -7,11 +7,21 @@ using UnityEngine.UI;
 
 public class PhysicsPlank : PhysicsObject
 {
-    // ✅ 네트워크 위치 동기화 (Inspector 없이 코드로만 처리)
+    // ✅ 네트워크 위치 동기화 (Server가 초기 위치 설정, Owner가 이동 시 업데이트)
+    // WritePermission.Server로 변경: Owner 대신 Server가 위치 설정
+    // (Spawn 직후 초기 위치를 Server가 설정해야 Client에서 올바른 위치로 시작)
     private NetworkVariable<Vector3> _syncedPosition = new NetworkVariable<Vector3>(
         Vector3.zero,
         NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Owner // Owner가 위치 업데이트
+        NetworkVariableWritePermission.Server // Server가 위치 업데이트
+    );
+
+    // ✅ 플레이어별 경계 동기화 (Server가 설정, Client가 읽음)
+    private NetworkVariable<float> _syncedLeftBoundX = new NetworkVariable<float>(
+        -8f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private NetworkVariable<float> _syncedRightBoundX = new NetworkVariable<float>(
+        8f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
     // public bool movable; // 이 변수는 MainBall.cs에서 공의 상태에 따라 제어할 수 있습니다. (선택적)
                            // 여기서는 항상 움직일 수 있다고 가정하고 진행합니다.
@@ -31,9 +41,32 @@ public class PhysicsPlank : PhysicsObject
     private Rigidbody2D _rb;
     private float _keyboardMoveSpeed = 15f; // PlankManager와 동일한 속도
 
+    // ✅ 멀티플레이어 입력 처리 (Owner만) - 직접 Input 사용
+    // ActionBus 제거: ParrelSync 환경에서 양쪽 에디터가 동시에 입력받는 문제 해결
+
     void Start()
     {
-        // ✅ 자동 초기화: Inspector 없이 코드로 모든 참조 설정
+        // ✅ 네트워크 모드에서는 OnNetworkSpawn()에서 초기화하므로 스킵
+        // (멀티플레이어에서 경계가 잘못 설정되는 것 방지)
+        var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+        bool isNetworkMode = netObj != null && (netObj.IsSpawned || Unity.Netcode.NetworkManager.Singleton?.IsListening == true);
+
+        if (isNetworkMode)
+        {
+            // 네트워크 모드: 기본 컴포넌트만 초기화, 경계는 OnNetworkSpawn()에서
+            plankPlane = new Plane(Vector3.forward, transform.position);
+            _rb = GetComponent<Rigidbody2D>();
+
+            if (mainCamera == null)
+            {
+                mainCamera = Camera.main;
+            }
+
+            GameLogger.Info("PhysicsPlank", $"{gameObject.name} 네트워크 모드 - OnNetworkSpawn() 대기 중");
+            return;
+        }
+
+        // ✅ 싱글플레이어 모드: 기존 로직
         AutoInitializeReferences();
 
         // 필수 참조 체크
@@ -57,7 +90,7 @@ public class PhysicsPlank : PhysicsObject
         plankPlane = new Plane(Vector3.forward, transform.position);
         _rb = GetComponent<Rigidbody2D>();
 
-        GameLogger.Success("PhysicsPlank", $"{gameObject.name} 초기화 완료");
+        GameLogger.Success("PhysicsPlank", $"{gameObject.name} 싱글플레이어 초기화 완료");
     }
 
     /// <summary>
@@ -77,6 +110,12 @@ public class PhysicsPlank : PhysicsObject
     /// <param name="deltaTime">프레임 시간</param>
     public void MoveByKeyboard(float horizontal, float deltaTime)
     {
+        // ✅ 네트워크 모드: Owner만 이동 가능
+        if (IsSpawned && !IsOwner)
+        {
+            return;
+        }
+
         if (Mathf.Abs(horizontal) < 0.01f) return;
 
         Vector3 currentPosition = transform.position;
@@ -101,6 +140,12 @@ public class PhysicsPlank : PhysicsObject
     /// <param name="camera">카메라 참조</param>
     public void MoveByPointer(Vector3 pointerPosition, Camera camera)
     {
+        // ✅ 네트워크 모드: Owner만 이동 가능
+        if (IsSpawned && !IsOwner)
+        {
+            return;
+        }
+
         if (camera == null || plankPlane.normal == Vector3.zero) return;
 
         // 1. 마우스 위치로 Ray 생성
@@ -192,28 +237,106 @@ public class PhysicsPlank : PhysicsObject
     {
         base.OnNetworkSpawn();
 
+        // ✅ 디버그: IsOwner 상태 확인
+        GameLogger.Warning("PhysicsPlank", $"[DEBUG] OnNetworkSpawn: name={gameObject.name}, OwnerClientId={OwnerClientId}, LocalClientId={NetworkManager.LocalClientId}, IsOwner={IsOwner}, IsServer={IsServer}");
+
+        // ✅ 경계 동기화: Client에서 NetworkVariable 값으로 경계 설정
+        SetupBoundariesFromNetwork();
+        _syncedLeftBoundX.OnValueChanged += OnBoundaryChanged;
+        _syncedRightBoundX.OnValueChanged += OnBoundaryChanged;
+
+        // ✅ Server: 초기 위치 동기화
+        if (IsServer)
+        {
+            _syncedPosition.Value = transform.position;
+            GameLogger.Info("PhysicsPlank", $"[Server] OnNetworkSpawn: 위치 동기화 = {transform.position}");
+        }
+
         if (IsOwner)
         {
-            // Owner: 초기 위치 동기화
-            _syncedPosition.Value = transform.position;
+            // ✅ Owner: 직접 Input.GetAxisRaw() 사용 (ActionBus 대신)
+            // ParrelSync 환경에서 포커스된 에디터만 입력 처리하기 위함
+            GameLogger.Success("PhysicsPlank", $"[Player {OwnerClientId}] Plank Owner 초기화 완료 (직접 Input 사용)");
+        }
 
-            // ✅ BrickGameManager 초기화는 BrickGameMultiplayerSpawner가 담당
-            // (Server에서 통합 관리 - ObjectPlacement와 함께 생성)
-            GameLogger.Info("PhysicsPlank", $"[Player {OwnerClientId}] Plank Owner 초기화 완료");
-        }
-        else
+        // ✅ Client(Non-Server): Server 위치로 즉시 이동
+        if (!IsServer)
         {
-            // 다른 플레이어: 서버 위치로 즉시 이동
-            transform.position = _syncedPosition.Value;
+            if (_syncedPosition.Value != Vector3.zero)
+            {
+                transform.position = _syncedPosition.Value;
+            }
             _syncedPosition.OnValueChanged += OnPositionChanged;
+            GameLogger.Info("PhysicsPlank", $"[Client] Plank 위치 동기화: {gameObject.name}, Position={transform.position}");
         }
+    }
+
+    /// <summary>
+    /// NetworkVariable에서 경계 값을 읽어서 경계 오브젝트 설정
+    /// </summary>
+    private void SetupBoundariesFromNetwork()
+    {
+        // 플레이어별 경계 오브젝트 이름
+        string leftName = $"LeftEnd_Player{OwnerClientId}";
+        string rightName = $"RightEnd_Player{OwnerClientId}";
+
+        // 기존 경계 오브젝트 찾기 또는 생성
+        GameObject leftObj = GameObject.Find(leftName);
+        GameObject rightObj = GameObject.Find(rightName);
+
+        if (leftObj == null)
+        {
+            leftObj = new GameObject(leftName);
+            leftObj.transform.position = new Vector3(_syncedLeftBoundX.Value, transform.position.y, 0);
+            GameLogger.Info("PhysicsPlank", $"[Client] 경계 생성: {leftName} at x={_syncedLeftBoundX.Value}");
+        }
+
+        if (rightObj == null)
+        {
+            rightObj = new GameObject(rightName);
+            rightObj.transform.position = new Vector3(_syncedRightBoundX.Value, transform.position.y, 0);
+            GameLogger.Info("PhysicsPlank", $"[Client] 경계 생성: {rightName} at x={_syncedRightBoundX.Value}");
+        }
+
+        leftEnd = leftObj.transform;
+        rightEnd = rightObj.transform;
+
+        GameLogger.Success("PhysicsPlank", $"[Player {OwnerClientId}] 경계 설정 완료: Left={_syncedLeftBoundX.Value}, Right={_syncedRightBoundX.Value}");
+    }
+
+    private void OnBoundaryChanged(float previousValue, float newValue)
+    {
+        // 경계 값 변경 시 재설정
+        SetupBoundariesFromNetwork();
+    }
+
+    /// <summary>
+    /// Server에서 경계 값 설정 (BrickGameMultiplayerSpawner에서 호출)
+    /// </summary>
+    public void SetBoundaries(float leftX, float rightX)
+    {
+        if (!IsServer)
+        {
+            GameLogger.Warning("PhysicsPlank", "SetBoundaries는 Server에서만 호출 가능!");
+            return;
+        }
+
+        _syncedLeftBoundX.Value = leftX;
+        _syncedRightBoundX.Value = rightX;
+
+        GameLogger.Success("PhysicsPlank", $"[Server] 경계 설정: Left={leftX}, Right={rightX}");
     }
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
 
-        if (!IsOwner)
+        // 경계 콜백 해제
+        _syncedLeftBoundX.OnValueChanged -= OnBoundaryChanged;
+        _syncedRightBoundX.OnValueChanged -= OnBoundaryChanged;
+
+        // Client에서만 위치 콜백 해제
+        if (!IsServer)
         {
             _syncedPosition.OnValueChanged -= OnPositionChanged;
         }
@@ -226,33 +349,64 @@ public class PhysicsPlank : PhysicsObject
 
     private void Update()
     {
-        // ✅ 멀티플레이어 모드: 네트워크 동기화만 처리
-        // (입력 처리는 PlankManager.UpdateMovement()에서 통합 처리)
+        // ✅ 멀티플레이어 모드
         if (IsSpawned)
         {
             if (IsOwner)
             {
-                // Owner: PlankManager가 이동시킨 위치를 서버에 동기화
+                // ✅ 포커스 체크: ParrelSync 환경에서 다른 에디터 입력 무시
+                if (Application.isFocused)
+                {
+                    // ✅ Owner: 직접 Input 처리 (ActionBus 대신 - 더 확실함)
+                    float horizontal = Input.GetAxisRaw("Horizontal");
+                    if (Mathf.Abs(horizontal) > 0.01f)
+                    {
+                        MoveByKeyboard(horizontal, Time.deltaTime);
+                    }
+                }
+
+                // Owner: 위치를 NetworkVariable로 동기화
                 SyncPositionToServer();
             }
             else
             {
-                // 다른 플레이어: 서버 위치로 부드럽게 보간
+                // Non-Owner: NetworkVariable 값으로 부드럽게 보간
                 InterpolateToServerPosition();
             }
         }
         // ✅ 싱글플레이어 모드: PlankManager.UpdateMovement()가 입력 처리
-        // (IsSpawned == false일 때 - 네트워크 동기화 불필요)
     }
 
     private void SyncPositionToServer()
     {
-        // 위치가 크게 변했을 때만 업데이트 (최적화)
+        // ✅ Owner가 Server에게 위치 전송 (ServerRpc 사용)
+        // NetworkVariable이 Server WritePermission이므로 직접 설정 불가
         float positionDiff = Vector3.Distance(transform.position, _syncedPosition.Value);
         if (positionDiff > 0.01f)
         {
-            _syncedPosition.Value = transform.position;
+            // Server라면 직접 설정, 아니라면 ServerRpc로 전송
+            if (IsServer)
+            {
+                _syncedPosition.Value = transform.position;
+            }
+            else
+            {
+                UpdatePositionServerRpc(transform.position);
+            }
         }
+    }
+
+    /// <summary>
+    /// Client Owner가 Server에게 위치 업데이트 요청
+    /// </summary>
+    [ServerRpc]
+    private void UpdatePositionServerRpc(Vector3 newPosition)
+    {
+        _syncedPosition.Value = newPosition;
+
+        // ✅ Server에서도 transform.position 즉시 업데이트
+        // Ball이 plank.transform.position을 참조하므로 Server에서도 위치 반영 필요!
+        transform.position = newPosition;
     }
 
     private void InterpolateToServerPosition()

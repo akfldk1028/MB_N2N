@@ -18,6 +18,10 @@ public class GameScene : BaseScene
 		Managers.Camera.Initialize();
 		GameLogger.Success("GameScene", "CameraManager 초기화 완료");
 
+		// ✅ BrickGame UI 표시
+		Managers.UI.ShowSceneUI<UI_BrickGameScene>();
+		GameLogger.Success("GameScene", "UI_BrickGameScene 표시 완료");
+
 		GameLogger.Success("GameScene", "GameScene Init 완료 (BrickGame은 Start에서 초기화)");
 		return true;
 	}
@@ -84,6 +88,9 @@ public class GameScene : BaseScene
 	// ✅ 매 프레임 입력 처리 (방향키를 ActionBus에 발행)
 	private void Update()
 	{
+		// ✅ 포커스가 없으면 입력 무시 (ParrelSync 등 멀티 에디터 테스트 시 필수)
+		if (!Application.isFocused) return;
+
 		// 방향키 입력 받기
 		float horizontal = Input.GetAxisRaw("Horizontal"); // A/D 또는 Left/Right Arrow
 

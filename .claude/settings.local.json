@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(Select-Object -First 30)"
+      "Bash(Select-String -Pattern \"Ball|PhysicsBall\")",
+      "Bash(Get-ChildItem -Path \"D:\\Data\\MB_N2N\\MB_N2N\\Assets\\@Scripts\" -Directory)",
+      "WebFetch(domain:code.claude.com)",
+      "Bash(dir /s \"D:\\Data\\MB_N2N\\MB_N2N\\Assets\\@Scripts\")",
+      "Bash(powershell:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(tree:*)",
+      "Bash(dir:*)",
+      "WebSearch",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__memory__create_entities",
+      "mcp__memory__add_observations",
+      "mcp__memory__read_graph",
+      "mcp__memory__open_nodes"
     ],
     "deny": [],
     "ask": []

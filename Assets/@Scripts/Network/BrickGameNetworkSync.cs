@@ -8,7 +8,7 @@ using MB.Infrastructure.Messages;
 /// Server의 BrickGameManager 이벤트를 NetworkedMessageChannel로 전달하여 모든 Client 동기화
 /// Managers.Game.BrickGame.Network로 접근
 /// </summary>
-public class BrickGameNetworkSync : NetworkBehaviour
+public class BrickGameNetworkSync : BaseGameNetworkSync<BrickGameManager>
 {
     #region NetworkedMessageChannels
     private NetworkedMessageChannel<BrickGameScoreMessage> _scoreChannel;
@@ -26,66 +26,19 @@ public class BrickGameNetworkSync : NetworkBehaviour
     public GamePhase Phase => _currentPhase;
     #endregion
 
-    #region References
-    private BrickGameManager _gameManager;
-    private bool _isInitialized;
-    #endregion
-
     #region Initialization
     /// <summary>
     /// BrickGameManager 연결 및 초기화
     /// </summary>
-    public void Initialize(BrickGameManager gameManager)
+    public override void Initialize(BrickGameManager gameManager)
     {
-        if (_isInitialized)
-        {
-            GameLogger.Warning("BrickGameNetworkSync", "이미 초기화됨");
-            return;
-        }
-
-        _gameManager = gameManager;
-        _isInitialized = true;
-
+        base.Initialize(gameManager);
         GameLogger.Success("BrickGameNetworkSync", "BrickGameManager 연결 완료");
     }
     #endregion
 
-    #region NetworkBehaviour Lifecycle
-    public override void OnNetworkSpawn()
-    {
-        base.OnNetworkSpawn();
-
-        // NetworkedMessageChannel 초기화
-        InitializeChannels();
-
-        if (IsServer)
-        {
-            // Server: BrickGameManager 이벤트 구독
-            SubscribeToGameManagerEvents();
-            GameLogger.Success("BrickGameNetworkSync", "[Server] 이벤트 구독 완료");
-        }
-        else
-        {
-            // Client: NetworkedMessageChannel 메시지 구독
-            SubscribeToNetworkMessages();
-            GameLogger.Success("BrickGameNetworkSync", "[Client] 네트워크 메시지 구독 완료");
-        }
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        if (IsServer)
-        {
-            UnsubscribeFromGameManagerEvents();
-        }
-
-        DisposeChannels();
-        base.OnNetworkDespawn();
-    }
-    #endregion
-
     #region Channel Initialization
-    private void InitializeChannels()
+    protected override void InitializeChannels()
     {
         _scoreChannel = new NetworkedMessageChannel<BrickGameScoreMessage>();
         _scoreChannel.Initialize(NetworkManager);
@@ -99,7 +52,7 @@ public class BrickGameNetworkSync : NetworkBehaviour
         GameLogger.Success("BrickGameNetworkSync", "NetworkedMessageChannel 초기화 완료");
     }
 
-    private void DisposeChannels()
+    protected override void DisposeChannels()
     {
         _scoreChannel?.Dispose();
         _stateChannel?.Dispose();
@@ -108,7 +61,7 @@ public class BrickGameNetworkSync : NetworkBehaviour
     #endregion
 
     #region Server: GameManager Event Subscription
-    private void SubscribeToGameManagerEvents()
+    protected override void SubscribeToGameManagerEvents()
     {
         if (_gameManager == null)
         {
@@ -125,7 +78,7 @@ public class BrickGameNetworkSync : NetworkBehaviour
         _gameManager.OnRowSpawn += HandleRowSpawn;
     }
 
-    private void UnsubscribeFromGameManagerEvents()
+    protected override void UnsubscribeFromGameManagerEvents()
     {
         if (_gameManager == null) return;
 
@@ -220,7 +173,7 @@ public class BrickGameNetworkSync : NetworkBehaviour
     #endregion
 
     #region Client: Network Message Subscription
-    private void SubscribeToNetworkMessages()
+    protected override void SubscribeToNetworkMessages()
     {
         _scoreChannel.Subscribe(OnScoreMessageReceived);
         _stateChannel.Subscribe(OnStateMessageReceived);

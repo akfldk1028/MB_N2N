@@ -293,39 +293,39 @@ public class BrickGameManager
     /// </summary>
     public void OnUpdate()
     {
-        // 🔒 멀티플레이어 Server Authority 체크
-        // Client는 게임 로직을 실행하지 않음 (Server 명령만 수신)
-        if (_networkManager != null && _networkManager.IsListening && !_networkManager.IsServer)
+        bool isClient = _networkManager != null && _networkManager.IsListening && !_networkManager.IsServer;
+        bool isMultiplayer = _networkManager != null && _networkManager.IsListening;
+
+        // ✅ Plank 이동: 멀티플레이어에서는 PhysicsPlank.Update()가 직접 처리
+        // 싱글플레이어에서만 PlankManager 사용
+        if (!isMultiplayer && _plankManager != null)
         {
-            // Client는 렌더링만 담당
+            _plankManager.UpdateMovement(Time.deltaTime);
+        }
+
+        // 🔒 게임 로직은 Server만 실행 (Server Authority)
+        if (isClient)
+        {
+            // Client는 PhysicsPlank가 직접 입력 처리
             return;
         }
+
+        // ===== 이하 Server 전용 로직 =====
 
         // ✅ 디버깅: OnUpdate가 호출되는지 확인 (매 60프레임마다)
         if (Time.frameCount % 60 == 0)
         {
-            GameLogger.Info("BrickGameManager", $"OnUpdate 호출됨! (프레임: {Time.frameCount}, IsGameActive: {_state.IsGameActive})");
+            GameLogger.Info("BrickGameManager", $"[Server] OnUpdate 호출됨! (프레임: {Time.frameCount}, IsGameActive: {_state.IsGameActive})");
         }
 
         if (!_state.IsGameActive)
         {
             if (Time.frameCount % 60 == 0)
             {
-                GameLogger.Warning("BrickGameManager", "게임이 활성화되지 않아 OnUpdate 스킵");
+                GameLogger.Warning("BrickGameManager", "[Server] 게임이 활성화되지 않아 OnUpdate 스킵");
             }
             return;
         }
-
-        // ✅ 입력 처리: 전역 Managers.Input이 ActionBus를 통해 방향키 입력 발행
-        // PlankManager가 ActionBus의 Input_ArrowKey 이벤트 구독하여 자동 처리됨
-
-        // 패들 이동 처리
-        if (_plankManager == null)
-        {
-            GameLogger.Error("BrickGameManager", "❌ _plankManager가 null입니다!");
-            return;
-        }
-        _plankManager.UpdateMovement(Time.deltaTime);
 
         // BallManager 파워 타이머 업데이트
         _ballManager.UpdatePowerTimer(Time.deltaTime);

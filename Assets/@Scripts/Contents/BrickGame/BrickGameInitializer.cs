@@ -26,7 +26,17 @@ public class BrickGameInitializer
     /// </summary>
     public bool Initialize()
     {
+        // ✅ 멀티플레이어 모드 체크: Spawner가 모든 초기화 담당
+        var networkManager = Unity.Netcode.NetworkManager.Singleton;
+        bool isMultiplayer = networkManager != null && networkManager.IsListening;
 
+        if (isMultiplayer)
+        {
+            GameLogger.Success("BrickGameInitializer", "[Multiplayer] BrickGameMultiplayerSpawner가 초기화 담당 - Initializer 스킵");
+            return true; // 멀티플레이어에서는 Spawner가 처리
+        }
+
+        // ✅ 싱글플레이어 모드: 기존 로직
         var sceneObjects = CollectSceneObjects();
 
         if (!ValidateRequirements(sceneObjects))

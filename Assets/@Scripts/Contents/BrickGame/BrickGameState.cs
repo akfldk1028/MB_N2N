@@ -105,7 +105,7 @@ public class BrickGameState
         GameLogger.Info("BrickGameState", "게임 상태 초기화됨");
     }
     #endregion
-    
+
     #region 디버그 정보
     /// <summary>
     /// 현재 상태를 문자열로 반환 (디버깅용)
@@ -116,4 +116,5 @@ public class BrickGameState
     }
     #endregion
 }
+
 

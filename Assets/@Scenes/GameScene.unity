@@ -141,13 +141,17 @@ PrefabInstance:
       propertyPath: m_Name
       value: ball
       objectReference: {fileID: 0}
+    - target: {fileID: 3194386974034348423, guid: 76117c1fc3ccb924387e8b9b4ed95852, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 4771544541113453117, guid: 76117c1fc3ccb924387e8b9b4ed95852, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 127.05
+      value: 125.76
       objectReference: {fileID: 0}
     - target: {fileID: 4771544541113453117, guid: 76117c1fc3ccb924387e8b9b4ed95852, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 4.92
+      value: 4.31
       objectReference: {fileID: 0}
     - target: {fileID: 4771544541113453117, guid: 76117c1fc3ccb924387e8b9b4ed95852, type: 3}
       propertyPath: m_LocalPosition.z
@@ -304,6 +308,10 @@ PrefabInstance:
       propertyPath: bonusBallPrefab
       value: 
       objectReference: {fileID: 1660242387830592, guid: cbf83497e9ba270478536edfbfcb9ade, type: 3}
+    - target: {fileID: 4898323116246605699, guid: 1c1e3324c5c17cf4884a418e2d996627, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6393847763707861588, guid: 1c1e3324c5c17cf4884a418e2d996627, type: 3}
       propertyPath: GlobalObjectIdHash
       value: 555332907

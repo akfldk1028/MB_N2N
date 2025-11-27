@@ -54,6 +54,10 @@ public class CameraManager
     /// <summary>
     /// Client-side Viewport 설정 (Host vs Client)
     /// 카메라 위치도 각 플레이어의 블록 영역으로 이동
+    ///
+    /// 규칙:
+    /// - 왼쪽 화면 = 내 게임 영역 (직접 플레이)
+    /// - 오른쪽 화면 = 상대방 게임 영역 (관전)
     /// </summary>
     /// <param name="localClientId">내 Client ID</param>
     public void SetupViewportsForLocalPlayer(ulong localClientId)
@@ -64,41 +68,33 @@ public class CameraManager
             return;
         }
 
-        // ✅ 플레이어별 xOffset (_plankSpacing = 3)
-        float player0Offset = -3f;  // Player 0 영역
-        float player1Offset = +3f;  // Player 1 영역
-
-        // ✅ 저장된 원래 위치를 기준으로 카메라 이동
-        Vector3 mainPos = _originalCameraPosition;
-        mainPos.x = _originalCameraPosition.x + player0Offset;  // Main → Player 0 영역
-        _mainCamera.transform.position = mainPos;
-
-        Vector3 subPos = _originalCameraPosition;
-        subPos.x = _originalCameraPosition.x + player1Offset;   // Sub → Player 1 영역
-        _subCamera.transform.position = subPos;
-        _subCamera.transform.rotation = _mainCamera.transform.rotation;
-
-        GameLogger.Success("CameraManager", $"[Client {localClientId}] Main_Camera → {mainPos}, Sub_Camera → {subPos}");
+        // ✅ 플레이어별 xOffset (_plankSpacing = 15: 카메라 영역 침범 방지)
+        float player0Offset = -15f;  // Player 0 영역 (Host)
+        float player1Offset = +15f;  // Player 1 영역 (Client)
 
         // localClientId가 0이면 Host, 1이면 Client
         bool isHost = (localClientId == 0);
 
-        if (isHost)
-        {
-            // Host: Main(왼쪽) + Sub(오른쪽)
-            _mainCamera.rect = new Rect(0, 0, 0.3f, 1);      // 왼쪽 30%
-            _subCamera.rect = new Rect(0.7f, 0, 0.3f, 1);    // 오른쪽 30%
+        // ✅ 내 영역과 상대 영역 결정
+        float myOffset = isHost ? player0Offset : player1Offset;
+        float opponentOffset = isHost ? player1Offset : player0Offset;
 
-            GameLogger.Success("CameraManager", "[Host] Main(왼쪽 0~0.3) + Sub(오른쪽 0.7~1)");
-        }
-        else
-        {
-            // Client: Sub(왼쪽) + Main(오른쪽)
-            _subCamera.rect = new Rect(0, 0, 0.3f, 1);       // 왼쪽 30%
-            _mainCamera.rect = new Rect(0.7f, 0, 0.3f, 1);   // 오른쪽 30%
+        // ✅ 왼쪽 카메라 = 내 영역, 오른쪽 카메라 = 상대 영역
+        // Main_Camera를 왼쪽(내 영역)으로, Sub_Camera를 오른쪽(상대 영역)으로 사용
+        Vector3 mainPos = _originalCameraPosition;
+        mainPos.x = _originalCameraPosition.x + myOffset;  // Main → 내 영역
+        _mainCamera.transform.position = mainPos;
 
-            GameLogger.Success("CameraManager", "[Client] Sub(왼쪽 0~0.3) + Main(오른쪽 0.7~1)");
-        }
+        Vector3 subPos = _originalCameraPosition;
+        subPos.x = _originalCameraPosition.x + opponentOffset;  // Sub → 상대 영역
+        _subCamera.transform.position = subPos;
+        _subCamera.transform.rotation = _mainCamera.transform.rotation;
+
+        // ✅ Viewport 설정 (항상 Main=왼쪽, Sub=오른쪽)
+        _mainCamera.rect = new Rect(0, 0, 0.3f, 1);      // 왼쪽 30% (내 게임)
+        _subCamera.rect = new Rect(0.7f, 0, 0.3f, 1);    // 오른쪽 30% (상대 게임)
+
+        GameLogger.Success("CameraManager", $"[Client {localClientId}] Main(왼쪽, 내 영역 x={myOffset}) + Sub(오른쪽, 상대 영역 x={opponentOffset})");
     }
 
     /// <summary>
