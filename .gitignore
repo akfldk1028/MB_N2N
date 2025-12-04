@@ -218,3 +218,5 @@ plastic.wktree
 # Git 파일 포함
 !.gitignore
 !.gitattributes
+nul
+replay_pid38220.log

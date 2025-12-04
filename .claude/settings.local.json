@@ -15,7 +15,9 @@
       "mcp__memory__create_entities",
       "mcp__memory__add_observations",
       "mcp__memory__read_graph",
-      "mcp__memory__open_nodes"
+      "mcp__memory__open_nodes",
+      "WebFetch(domain:docs.unity3d.com)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

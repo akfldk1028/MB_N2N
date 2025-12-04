@@ -35,6 +35,10 @@ public class UI_BrickGameScene : UI_Scene
     private int _player0Score = 0;
     private int _player1Score = 0;
     private float _territoryRatio = 0.5f;
+
+    // 구독 해제용
+    private System.IDisposable _scoreSubscription;
+    private System.IDisposable _territorySubscription;
     #endregion
 
     public override bool Init()
@@ -67,10 +71,10 @@ public class UI_BrickGameScene : UI_Scene
     private void SubscribeToEvents()
     {
         // 점수 변경 이벤트 구독
-        Managers.Subscribe(ActionId.BrickGame_ScoreChanged, OnScoreChanged);
+        _scoreSubscription = Managers.Subscribe(ActionId.BrickGame_ScoreChanged, OnScoreChanged);
 
         // 땅따먹기 영역 변경 이벤트 구독
-        Managers.Subscribe(ActionId.BrickGame_TerritoryChanged, OnTerritoryChanged);
+        _territorySubscription = Managers.Subscribe(ActionId.BrickGame_TerritoryChanged, OnTerritoryChanged);
 
         GameLogger.Info("UI_BrickGameScene", "ActionBus 이벤트 구독 완료");
     }
@@ -78,10 +82,12 @@ public class UI_BrickGameScene : UI_Scene
     private void UnsubscribeFromEvents()
     {
         // 점수 변경 이벤트 구독 해제
-        Managers.Unsubscribe(ActionId.BrickGame_ScoreChanged, OnScoreChanged);
+        _scoreSubscription?.Dispose();
+        _scoreSubscription = null;
 
         // 땅따먹기 영역 변경 이벤트 구독 해제
-        Managers.Unsubscribe(ActionId.BrickGame_TerritoryChanged, OnTerritoryChanged);
+        _territorySubscription?.Dispose();
+        _territorySubscription = null;
 
         GameLogger.Info("UI_BrickGameScene", "ActionBus 이벤트 구독 해제");
     }

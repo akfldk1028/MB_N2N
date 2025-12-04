@@ -5,16 +5,25 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// 블록깨기 패들(Plank) 컨트롤러
+///
+/// 멀티플레이어 동기화:
+/// - NetworkVariable + ServerRpc로 위치 동기화
+/// - Owner(Client)가 입력 처리 → ServerRpc로 Server에 전송 → Server가 NetworkVariable 업데이트
+/// - 경계(leftEnd, rightEnd)도 NetworkVariable로 동기화
+/// </summary>
 public class PhysicsPlank : PhysicsObject
 {
-    // ✅ 네트워크 위치 동기화 (Server가 초기 위치 설정, Owner가 이동 시 업데이트)
-    // WritePermission.Server로 변경: Owner 대신 Server가 위치 설정
-    // (Spawn 직후 초기 위치를 Server가 설정해야 Client에서 올바른 위치로 시작)
+    // ✅ 네트워크 위치 동기화 (Server가 Write, Everyone Read)
     private NetworkVariable<Vector3> _syncedPosition = new NetworkVariable<Vector3>(
         Vector3.zero,
         NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server // Server가 위치 업데이트
+        NetworkVariableWritePermission.Server
     );
+
+    // ✅ 위치 보간용
+    private float _interpolationSpeed = 15f;
 
     // ✅ 플레이어별 경계 동기화 (Server가 설정, Client가 읽음)
     private NetworkVariable<float> _syncedLeftBoundX = new NetworkVariable<float>(
@@ -23,9 +32,6 @@ public class PhysicsPlank : PhysicsObject
     private NetworkVariable<float> _syncedRightBoundX = new NetworkVariable<float>(
         8f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
-    // public bool movable; // 이 변수는 MainBall.cs에서 공의 상태에 따라 제어할 수 있습니다. (선택적)
-                           // 여기서는 항상 움직일 수 있다고 가정하고 진행합니다.
-                           // 만약 공이 발사되기 전에는 움직이지 않게 하려면 MainBall.cs에서 이 값을 조절해야 합니다.
 
     public Transform leftEnd = null;  // 왼쪽 이동 한계점 Transform
     public Transform rightEnd = null; // 오른쪽 이동 한계점 Transform
@@ -245,29 +251,38 @@ public class PhysicsPlank : PhysicsObject
         _syncedLeftBoundX.OnValueChanged += OnBoundaryChanged;
         _syncedRightBoundX.OnValueChanged += OnBoundaryChanged;
 
-        // ✅ Server: 초기 위치 동기화
+        // ✅ 위치 동기화: NetworkVariable + ServerRpc 수동 동기화
+        _syncedPosition.OnValueChanged += OnSyncedPositionChanged;
+
+        // Server: 초기 위치 설정
         if (IsServer)
         {
             _syncedPosition.Value = transform.position;
-            GameLogger.Info("PhysicsPlank", $"[Server] OnNetworkSpawn: 위치 동기화 = {transform.position}");
+            GameLogger.Info("PhysicsPlank", $"[Server] 초기 위치 동기화: {transform.position}");
         }
 
         if (IsOwner)
         {
             // ✅ Owner: 직접 Input.GetAxisRaw() 사용 (ActionBus 대신)
             // ParrelSync 환경에서 포커스된 에디터만 입력 처리하기 위함
-            GameLogger.Success("PhysicsPlank", $"[Player {OwnerClientId}] Plank Owner 초기화 완료 (직접 Input 사용)");
+            GameLogger.Success("PhysicsPlank", $"[Player {OwnerClientId}] Plank Owner 초기화 완료 (수동 NetworkVariable 동기화)");
         }
-
-        // ✅ Client(Non-Server): Server 위치로 즉시 이동
-        if (!IsServer)
+        else
         {
-            if (_syncedPosition.Value != Vector3.zero)
-            {
-                transform.position = _syncedPosition.Value;
-            }
-            _syncedPosition.OnValueChanged += OnPositionChanged;
-            GameLogger.Info("PhysicsPlank", $"[Client] Plank 위치 동기화: {gameObject.name}, Position={transform.position}");
+            // Non-Owner: NetworkVariable로 위치 보간
+            GameLogger.Info("PhysicsPlank", $"[Non-Owner] Plank 위치는 NetworkVariable로 동기화: {gameObject.name}");
+        }
+    }
+
+    /// <summary>
+    /// NetworkVariable 위치 변경 콜백 (Non-Owner용)
+    /// </summary>
+    private void OnSyncedPositionChanged(Vector3 previousValue, Vector3 newValue)
+    {
+        // Non-Owner만 처리 (Owner는 직접 위치 설정)
+        if (!IsOwner)
+        {
+            GameLogger.DevLog("PhysicsPlank", $"[Non-Owner] 위치 동기화 수신: {previousValue} → {newValue}");
         }
     }
 
@@ -335,16 +350,8 @@ public class PhysicsPlank : PhysicsObject
         _syncedLeftBoundX.OnValueChanged -= OnBoundaryChanged;
         _syncedRightBoundX.OnValueChanged -= OnBoundaryChanged;
 
-        // Client에서만 위치 콜백 해제
-        if (!IsServer)
-        {
-            _syncedPosition.OnValueChanged -= OnPositionChanged;
-        }
-    }
-
-    private void OnPositionChanged(Vector3 previousValue, Vector3 newValue)
-    {
-        // 다른 플레이어의 패들 위치 업데이트는 Update()에서 Lerp로 처리
+        // 위치 동기화 콜백 해제
+        _syncedPosition.OnValueChanged -= OnSyncedPositionChanged;
     }
 
     private void Update()
@@ -357,7 +364,7 @@ public class PhysicsPlank : PhysicsObject
                 // ✅ 포커스 체크: ParrelSync 환경에서 다른 에디터 입력 무시
                 if (Application.isFocused)
                 {
-                    // ✅ Owner: 직접 Input 처리 (ActionBus 대신 - 더 확실함)
+                    // ✅ Owner: 직접 Input 처리
                     float horizontal = Input.GetAxisRaw("Horizontal");
                     if (Mathf.Abs(horizontal) > 0.01f)
                     {
@@ -365,60 +372,70 @@ public class PhysicsPlank : PhysicsObject
                     }
                 }
 
-                // Owner: 위치를 NetworkVariable로 동기화
+                // ✅ Owner: 위치를 ServerRpc로 Server에 전송
                 SyncPositionToServer();
             }
             else
             {
-                // Non-Owner: NetworkVariable 값으로 부드럽게 보간
-                InterpolateToServerPosition();
+                // ✅ Non-Owner: NetworkVariable 값으로 보간
+                InterpolateToSyncedPosition();
             }
         }
         // ✅ 싱글플레이어 모드: PlankManager.UpdateMovement()가 입력 처리
     }
 
+    #region 위치 동기화 (수동 NetworkVariable + ServerRpc)
+
+    /// <summary>
+    /// Owner가 자신의 위치를 Server에 동기화
+    /// </summary>
     private void SyncPositionToServer()
     {
-        // ✅ Owner가 Server에게 위치 전송 (ServerRpc 사용)
-        // NetworkVariable이 Server WritePermission이므로 직접 설정 불가
-        float positionDiff = Vector3.Distance(transform.position, _syncedPosition.Value);
-        if (positionDiff > 0.01f)
+        // 위치 변경이 있을 때만 전송 (대역폭 절약)
+        if (Vector3.Distance(transform.position, _syncedPosition.Value) > 0.01f)
         {
-            // Server라면 직접 설정, 아니라면 ServerRpc로 전송
-            if (IsServer)
-            {
-                _syncedPosition.Value = transform.position;
-            }
-            else
-            {
-                UpdatePositionServerRpc(transform.position);
-            }
+            UpdatePositionServerRpc(transform.position);
         }
     }
 
     /// <summary>
-    /// Client Owner가 Server에게 위치 업데이트 요청
+    /// ServerRpc: Client → Server로 위치 전송
     /// </summary>
     [ServerRpc]
     private void UpdatePositionServerRpc(Vector3 newPosition)
     {
+        // Server에서 NetworkVariable 업데이트 → 모든 Client에 자동 전파
         _syncedPosition.Value = newPosition;
 
-        // ✅ Server에서도 transform.position 즉시 업데이트
-        // Ball이 plank.transform.position을 참조하므로 Server에서도 위치 반영 필요!
-        transform.position = newPosition;
+        // ✅ Non-Owner Plank만 위치 업데이트 (Client가 Owner인 Plank)
+        // Host가 Owner인 Plank는 이미 직접 이동하고 있으므로 덮어쓰면 안 됨
+        if (!IsOwner)
+        {
+            transform.position = newPosition;
+        }
+
+        // ✅ 디버그: 30프레임마다 로그
+        if (Time.frameCount % 30 == 0)
+        {
+            GameLogger.DevLog("PhysicsPlank", $"[ServerRpc] Plank={gameObject.name}, 위치={newPosition}, Owner={OwnerClientId}, IsOwner={IsOwner}");
+        }
     }
 
-    private void InterpolateToServerPosition()
+    /// <summary>
+    /// Non-Owner가 NetworkVariable 값으로 위치 보간
+    /// </summary>
+    private void InterpolateToSyncedPosition()
     {
-        // 부드럽게 보간
-        float interpolationSpeed = 15f;
-        transform.position = Vector3.Lerp(
-            transform.position,
-            _syncedPosition.Value,
-            Time.deltaTime * interpolationSpeed
-        );
+        Vector3 targetPosition = _syncedPosition.Value;
+
+        // 초기값(0,0,0)이면 무시
+        if (targetPosition == Vector3.zero) return;
+
+        // 부드러운 보간
+        transform.position = Vector3.Lerp(transform.position, targetPosition, _interpolationSpeed * Time.deltaTime);
     }
+
+    #endregion
 
     /// <summary>
     /// 플랭크와 공의 충돌 시 튕겨나갈 속도를 계산하여 반환합니다.

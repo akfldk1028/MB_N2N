@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 using Unity.Assets.Scripts.Objects;
 using MB.Infrastructure.Messages;
@@ -435,6 +436,10 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         {
             networkObject = plankObject.AddComponent<NetworkObject>();
         }
+
+        // ⚠️ 런타임에 NetworkBehaviour(ClientNetworkTransform) AddComponent 금지!
+        // NetworkBehaviourId 불일치로 에러 발생함
+        // 위치 동기화는 PhysicsPlank 내부의 NetworkVariable + ServerRpc로 처리
 
         // 스폰 (Owner 지정)
         networkObject.SpawnWithOwnership(clientId);

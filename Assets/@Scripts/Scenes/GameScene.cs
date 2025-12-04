@@ -18,9 +18,23 @@ public class GameScene : BaseScene
 		Managers.Camera.Initialize();
 		GameLogger.Success("GameScene", "CameraManager 초기화 완료");
 
-		// ✅ BrickGame UI 표시
-		Managers.UI.ShowSceneUI<UI_BrickGameScene>();
-		GameLogger.Success("GameScene", "UI_BrickGameScene 표시 완료");
+		// ✅ BrickGame UI 표시 (prefab 없으면 스킵 - 멀티플레이어 Client에서 발생 가능)
+		try
+		{
+			var sceneUI = Managers.UI.ShowSceneUI<UI_BrickGameScene>();
+			if (sceneUI != null)
+			{
+				GameLogger.Success("GameScene", "UI_BrickGameScene 표시 완료");
+			}
+			else
+			{
+				GameLogger.Warning("GameScene", "UI_BrickGameScene prefab을 찾을 수 없음 (Addressable 미로드 또는 prefab 없음)");
+			}
+		}
+		catch (System.Exception e)
+		{
+			GameLogger.Warning("GameScene", $"UI_BrickGameScene 로드 실패 (무시): {e.Message}");
+		}
 
 		GameLogger.Success("GameScene", "GameScene Init 완료 (BrickGame은 Start에서 초기화)");
 		return true;

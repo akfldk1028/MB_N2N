@@ -749,8 +749,16 @@ namespace Unity.Assets.Scripts.Objects
         if (plank != null)
         {
             // ✅ Plank 위 SPAWN_OFFSET_Y만큼 위에 배치
-            Vector3 newPosition = plank.transform.position;
+            Vector3 plankPos = plank.transform.position;
+            Vector3 newPosition = plankPos;
             newPosition.y += SPAWN_OFFSET_Y;
+
+            // ✅ 디버그: 위치 변경 추적 (Server에서만, 10프레임마다)
+            if (IsServer && Time.frameCount % 30 == 0)
+            {
+                GameLogger.DevLog("PhysicsBall", $"[Server] Ball={gameObject.name}, Plank={plank.name}, PlankPos={plankPos}, BallPos={newPosition}");
+            }
+
             transform.position = newPosition;
 
             // 속도 초기화
