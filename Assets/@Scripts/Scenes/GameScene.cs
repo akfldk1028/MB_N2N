@@ -58,11 +58,8 @@ public class GameScene : BaseScene
 
 		if (initializer.Initialize())
 		{
-			// 멀티플레이어 모드 확인
-			var networkManager = Unity.Netcode.NetworkManager.Singleton;
-			bool isMultiplayer = networkManager != null && networkManager.IsListening;
-
-			if (!isMultiplayer)
+			// ✅ MultiplayerUtil 사용
+			if (MultiplayerUtil.IsSinglePlayer())
 			{
 				// 싱글플레이어: 네트워크 동기화 연결 및 게임 시작
 				ConnectNetworkSync();
@@ -115,22 +112,19 @@ public class GameScene : BaseScene
 
 	public override void Clear()
 	{
-		// 멀티플레이어 모드 확인
-		var networkManager = Unity.Netcode.NetworkManager.Singleton;
-		bool isMultiplayer = networkManager != null && networkManager.IsListening;
-
-		if (isMultiplayer)
+		// ✅ MultiplayerUtil 사용
+		if (MultiplayerUtil.IsMultiplayer())
 		{
 			// 멀티플레이어: 모든 플레이어 게임 정리
 			Managers.Game?.CleanupAllPlayerGames();
-			Managers.Camera?.ResetViewports();  // Viewport만 초기화
+			Managers.Camera?.ResetViewports();
 			GameLogger.Info("GameScene", "GameScene 정리 완료 (멀티플레이어 - 모든 플레이어 게임 정리됨)");
 		}
 		else
 		{
 			// 싱글플레이어: 단일 BrickGame 정리
 			Managers.Game?.CleanupBrickGame();
-			Managers.Camera?.ResetViewports();  // Viewport만 초기화
+			Managers.Camera?.ResetViewports();
 			GameLogger.Info("GameScene", "GameScene 정리 완료 (싱글플레이어)");
 		}
 	}

@@ -17,7 +17,12 @@
       "mcp__memory__read_graph",
       "mcp__memory__open_nodes",
       "WebFetch(domain:docs.unity3d.com)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "mcp__filesystem__directory_tree",
+      "mcp__memory-service__store_memory",
+      "Bash(C:Python313python.exe -m pip show mcp-memory-service)",
+      "mcp__memory-service__retrieve_memory",
+      "mcp__memory-service__recall_memory"
     ],
     "deny": [],
     "ask": []

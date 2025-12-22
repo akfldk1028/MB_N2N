@@ -66,29 +66,23 @@ namespace Unity.Assets.Scripts.Objects
             isGameOverTriggered = true;
             Debug.LogError($"[Brick] 게임 오버: 벽돌 {gameObject.name}이 바닥 경계선({bottomBoundary})에 도달했습니다!");
 
-            // ✅ 멀티플레이어: 플레이어별 게임 오버
-            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
-            var networkManager = Unity.Netcode.NetworkManager.Singleton;
-
-            if (brickNetObj != null && networkManager != null && networkManager.IsListening)
+            // ✅ MultiplayerUtil 사용
+            if (MultiplayerUtil.IsMultiplayer())
             {
                 // 멀티플레이어 모드: 해당 플레이어의 게임만 오버
-                ulong ownerClientId = brickNetObj.OwnerClientId;
-                var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
-
-                if (playerGame != null)
+                Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (brickNetObj != null)
                 {
-                    playerGame.GameOver();
+                    ulong ownerClientId = brickNetObj.OwnerClientId;
+                    var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
+                    playerGame?.GameOver();
                     GameLogger.Warning("Brick", $"[Player {ownerClientId}] 게임 오버!");
                 }
             }
             else
             {
-                // 싱글플레이어 모드: 기본 BrickGame 게임 오버
-                if (Managers.Game?.BrickGame != null)
-                {
-                    Managers.Game.BrickGame.GameOver();
-                }
+                // 싱글플레이어 모드
+                Managers.Game?.BrickGame?.GameOver();
             }
         }
         
@@ -102,22 +96,22 @@ namespace Unity.Assets.Scripts.Objects
 
         /// <summary>
         /// 멀티플레이어: 벽돌과 공의 소유권이 일치하는지 확인
+        /// ✅ MultiplayerUtil 사용
         /// </summary>
         private bool CheckOwnership(GameObject ballObject)
         {
-            // NetworkObject 컴포넌트 확인
-            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
-            Unity.Netcode.NetworkObject ballNetObj = ballObject.GetComponent<Unity.Netcode.NetworkObject>();
-
-            // NetworkObject가 없으면 싱글플레이어 모드 (항상 충돌 허용)
-            if (brickNetObj == null || ballNetObj == null)
+            // 싱글플레이어: 항상 충돌 허용
+            if (MultiplayerUtil.IsSinglePlayer())
             {
                 return true;
             }
 
-            // NetworkManager가 없거나 비활성이면 싱글플레이어 모드
-            var networkManager = Unity.Netcode.NetworkManager.Singleton;
-            if (networkManager == null || !networkManager.IsListening)
+            // NetworkObject 컴포넌트 확인
+            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+            Unity.Netcode.NetworkObject ballNetObj = ballObject.GetComponent<Unity.Netcode.NetworkObject>();
+
+            // NetworkObject가 없으면 충돌 허용
+            if (brickNetObj == null || ballNetObj == null)
             {
                 return true;
             }
@@ -127,7 +121,6 @@ namespace Unity.Assets.Scripts.Objects
 
             if (!isSameOwner)
             {
-                // 디버그: 소유권 불일치
                 GameLogger.Info("Brick", $"충돌 무시: Brick Owner={brickNetObj.OwnerClientId}, Ball Owner={ballNetObj.OwnerClientId}");
             }
 
@@ -184,31 +177,26 @@ namespace Unity.Assets.Scripts.Objects
         
         /// <summary>
         /// 플레이어별 점수 추가
+        /// ✅ MultiplayerUtil 사용
         /// </summary>
         private void AddScoreToPlayer(int score)
         {
-            Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
-            var networkManager = Unity.Netcode.NetworkManager.Singleton;
-
-            if (brickNetObj != null && networkManager != null && networkManager.IsListening)
+            if (MultiplayerUtil.IsMultiplayer())
             {
                 // 멀티플레이어 모드: 해당 플레이어에게 점수 추가
-                ulong ownerClientId = brickNetObj.OwnerClientId;
-                var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
-
-                if (playerGame != null)
+                Unity.Netcode.NetworkObject brickNetObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (brickNetObj != null)
                 {
-                    playerGame.AddScore(score);
+                    ulong ownerClientId = brickNetObj.OwnerClientId;
+                    var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
+                    playerGame?.AddScore(score);
                     GameLogger.Info("Brick", $"[Player {ownerClientId}] 점수 +{score}");
                 }
             }
             else
             {
-                // 싱글플레이어 모드: 기본 BrickGame에 점수 추가
-                if (Managers.Game?.BrickGame != null)
-                {
-                    Managers.Game.BrickGame.AddScore(score);
-                }
+                // 싱글플레이어 모드
+                Managers.Game?.BrickGame?.AddScore(score);
             }
         }
 

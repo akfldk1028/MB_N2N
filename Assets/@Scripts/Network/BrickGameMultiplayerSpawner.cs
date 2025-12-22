@@ -5,6 +5,7 @@ using Unity.Netcode.Components;
 using UnityEngine;
 using Unity.Assets.Scripts.Objects;
 using MB.Infrastructure.Messages;
+using MB.Network.Factories;
 
 /// <summary>
 /// 블록깨기 멀티플레이 스폰 매니저
@@ -27,6 +28,11 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     private Transform _leftBoundary;
     private Transform _rightBoundary;
     private Transform _topBoundary;
+    #endregion
+
+    #region Factories (모듈화된 생성 로직)
+    private BrickGameBordersFactory _bordersFactory = new BrickGameBordersFactory();
+    private BrickGameSpawnFactory _spawnFactory;
     #endregion
 
     #region NetworkVariables (점수 동기화 - Server Write, Everyone Read)
@@ -79,6 +85,7 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         public ObjectPlacement ObjectPlacement; // ✅ 플레이어별 ObjectPlacement
         public GameObject LeftBoundary;  // ✅ 플레이어별 왼쪽 경계
         public GameObject RightBoundary; // ✅ 플레이어별 오른쪽 경계
+        public GameObject BordersContainer; // ✅ 플레이어별 물리 벽 (BoxCollider2D 포함)
     }
     #endregion
 
@@ -131,6 +138,29 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         {
             GameLogger.Success("BrickGameMultiplayerSpawner", $"Plank 템플릿 이미 있음: {_plankPrefab.name}");
         }
+
+        // ✅ SpawnFactory 초기화 (컨텍스트 주입)
+        InitializeSpawnFactory();
+    }
+
+    /// <summary>
+    /// SpawnFactory 초기화 (컨텍스트 주입 방식)
+    /// </summary>
+    private void InitializeSpawnFactory()
+    {
+        var context = new BrickGameSpawnFactory.SpawnContext
+        {
+            BallPrefab = _ballPrefab,
+            PlankPrefab = _plankPrefab,
+            MainCamera = _mainCamera,
+            LeftBoundary = _leftBoundary,
+            RightBoundary = _rightBoundary,
+            PlankYPosition = _plankYPosition,
+            PlankSpacing = _plankSpacing
+        };
+
+        _spawnFactory = new BrickGameSpawnFactory(context);
+        GameLogger.Success("BrickGameMultiplayerSpawner", "SpawnFactory 초기화 완료 (컨텍스트 주입)");
     }
 
     /// <summary>
@@ -323,6 +353,9 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         GameLogger.Info("BrickGameMultiplayerSpawner", $"🎮 플레이어 {clientId} 연결됨 - Ball & Plank 생성 중...");
         GameLogger.Warning("BrickGameMultiplayerSpawner", $"[DEBUG] clientId={clientId}, playerIndex={playerIndex}, totalPlayers={totalPlayers}");
 
+        // 0. xOffset 계산 (모든 스폰에서 공통 사용)
+        float xOffset = CalculatePlayerXOffset(clientId);
+
         // 1. Plank 생성 (경계 포함)
         var (plankObject, leftBound, rightBound) = SpawnPlankForPlayer(clientId, playerIndex);
 
@@ -332,7 +365,15 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         // 3. ObjectPlacement 생성 (플레이어별 벽돌 영역)
         ObjectPlacement objectPlacement = CreateObjectPlacementForPlayer(clientId, playerIndex);
 
-        // 4. 플레이어 오브젝트 추적
+        // ✅ 4. 플레이어별 물리 벽(borders) 생성 - BoxCollider2D + SpriteRenderer 포함!
+        float leftX = leftBound.transform.position.x;
+        float rightX = rightBound.transform.position.x;
+        GameObject bordersContainer = SpawnBordersForPlayer(clientId, leftBound, rightBound);
+
+        // ✅ 5. Client들에게도 벽 생성 요청 (ClientRpc)
+        SpawnBordersClientRpc(clientId, leftX, rightX, _plankYPosition);
+
+        // 6. 플레이어 오브젝트 추적
         _playerObjects[clientId] = new PlayerObjects
         {
             Ball = ballObject,
@@ -340,10 +381,11 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             PlayerIndex = playerIndex,
             ObjectPlacement = objectPlacement,
             LeftBoundary = leftBound,   // ✅ 플레이어별 경계 저장
-            RightBoundary = rightBound  // ✅ 플레이어별 경계 저장
+            RightBoundary = rightBound, // ✅ 플레이어별 경계 저장
+            BordersContainer = bordersContainer // ✅ 물리 벽 컨테이너
         };
 
-        // ✅ 5. 플레이어별 BrickGameManager 생성 (Server-side)
+        // ✅ 7. 플레이어별 BrickGameManager 생성 (Server-side)
         // 카메라는 각 Client에서 설정하므로 여기서는 Main Camera 임시 사용
         PhysicsPlank plank = plankObject.GetComponent<PhysicsPlank>();
         if (plank != null)
@@ -377,141 +419,76 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     }
 
     /// <summary>
-    /// 플레이어별 Plank 생성
+    /// 플레이어별 Plank 생성 - Factory 패턴 사용
     /// </summary>
     /// <returns>(Plank, LeftBoundary, RightBoundary)</returns>
     private (GameObject plank, GameObject leftBound, GameObject rightBound) SpawnPlankForPlayer(ulong clientId, int playerIndex)
     {
-        if (_plankPrefab == null)
-        {
-            GameLogger.Error("BrickGameMultiplayerSpawner", "Plank 프리팹이 없습니다!");
-            return (null, null, null);
-        }
+        // ✅ Factory를 통해 Plank 생성 (순수 GameObject 생성)
+        var result = _spawnFactory.CreatePlank(clientId);
+        if (result == null) return (null, null, null);
 
-        // ✅ clientId 기반 xOffset 계산 (playerIndex 대신)
-        float xOffset = CalculatePlayerXOffset(clientId);
-
-        // ✅ Plank 위치: LeftEnd/RightEnd의 중앙 + xOffset
-        float centerX = (_leftBoundary.position.x + _rightBoundary.position.x) / 2f;
-        Vector3 spawnPosition = new Vector3(centerX + xOffset, _plankYPosition, 0);
-
-        // ✅ 플레이어별 독립적인 경계 먼저 생성
-        GameObject leftBoundObj = new GameObject($"LeftEnd_Player{clientId}");
-        GameObject rightBoundObj = new GameObject($"RightEnd_Player{clientId}");
-
-        // ✅ 원래 경계 + xOffset
-        leftBoundObj.transform.position = new Vector3(_leftBoundary.position.x + xOffset, _leftBoundary.position.y, _leftBoundary.position.z);
-        rightBoundObj.transform.position = new Vector3(_rightBoundary.position.x + xOffset, _rightBoundary.position.y, _rightBoundary.position.z);
-
-        // ✅ Plank 프리팹이 활성 상태인지 확인
-        bool prefabWasActive = _plankPrefab.activeSelf;
-
-        // Plank 생성 (템플릿 복제 또는 프리팹 인스턴스화)
-        GameObject plankObject = Instantiate(_plankPrefab);
-        plankObject.name = $"Plank_Player{clientId}";
-        plankObject.transform.position = spawnPosition;
-
-        // ✅ Start() 실행 방지를 위해 즉시 비활성화
-        plankObject.SetActive(false);
-
-        // ✅ PhysicsPlank 경계를 Start() 실행 전에 미리 설정!
-        PhysicsPlank plank = plankObject.GetComponent<PhysicsPlank>();
-        if (plank != null)
-        {
-            plank.leftEnd = leftBoundObj.transform;
-            plank.rightEnd = rightBoundObj.transform;
-            plank.mainCamera = _mainCamera;
-
-            GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] Plank 경계 설정: Left={leftBoundObj.transform.position.x}, Right={rightBoundObj.transform.position.x}");
-        }
-
-        // ✅ 이제 활성화 → Start() 실행 → 경계가 이미 설정되어 있어서 AutoInitializeReferences() 스킵!
-        plankObject.SetActive(true);
-
-        GameLogger.Warning("BrickGameMultiplayerSpawner", $"[DEBUG] Plank 생성 위치: clientId={clientId}, position={spawnPosition}, xOffset={xOffset}");
+        // ✅ 활성화 후 NetworkObject 스폰 (네트워크 로직은 Spawner가 담당)
+        _spawnFactory.ActivatePlank(result);
 
         // NetworkObject 설정
-        NetworkObject networkObject = plankObject.GetComponent<NetworkObject>();
+        NetworkObject networkObject = result.PlankObject.GetComponent<NetworkObject>();
         if (networkObject == null)
         {
-            networkObject = plankObject.AddComponent<NetworkObject>();
+            networkObject = result.PlankObject.AddComponent<NetworkObject>();
         }
-
-        // ⚠️ 런타임에 NetworkBehaviour(ClientNetworkTransform) AddComponent 금지!
-        // NetworkBehaviourId 불일치로 에러 발생함
-        // 위치 동기화는 PhysicsPlank 내부의 NetworkVariable + ServerRpc로 처리
 
         // 스폰 (Owner 지정)
         networkObject.SpawnWithOwnership(clientId);
 
         // ✅ NetworkVariable로 경계 동기화 (Spawn 후에 설정해야 함)
-        if (plank != null)
+        if (result.PlankComponent != null)
         {
-            plank.SetBoundaries(leftBoundObj.transform.position.x, rightBoundObj.transform.position.x);
+            result.PlankComponent.SetBoundaries(
+                result.LeftBoundary.transform.position.x,
+                result.RightBoundary.transform.position.x
+            );
         }
 
-        GameLogger.Info("BrickGameMultiplayerSpawner", $"  📍 Plank 스폰: {spawnPosition} (xOffset: {xOffset})");
+        GameLogger.Info("BrickGameMultiplayerSpawner",
+            $"  📍 Plank 네트워크 스폰 완료: {result.PlankObject.transform.position}");
 
-        return (plankObject, leftBoundObj, rightBoundObj);
+        return (result.PlankObject, result.LeftBoundary, result.RightBoundary);
     }
 
     /// <summary>
-    /// 플레이어별 Ball 생성
+    /// 플레이어별 Ball 생성 - Factory 패턴 사용
     /// </summary>
     private GameObject SpawnBallForPlayer(ulong clientId, int playerIndex, GameObject plankObject)
     {
-        if (_ballPrefab == null)
+        // ✅ Plank 결과 객체 생성 (Factory 호환용)
+        var plankResult = new BrickGameSpawnFactory.PlankSpawnResult
         {
-            GameLogger.Error("BrickGameMultiplayerSpawner", "Ball 프리팹이 없습니다!");
-            return null;
-        }
+            PlankObject = plankObject,
+            PlankComponent = plankObject.GetComponent<PhysicsPlank>()
+        };
 
-        // Ball 위치: Plank 위에
-        Vector3 spawnPosition = plankObject.transform.position + Vector3.up * 1f;
+        // ✅ Factory를 통해 Ball 생성 (순수 GameObject 생성)
+        var result = _spawnFactory.CreateBall(clientId, plankResult);
+        if (result == null) return null;
 
-        // ✅ Ball 생성
-        GameObject ballObject = Instantiate(_ballPrefab, spawnPosition, Quaternion.identity);
-        ballObject.name = $"Ball_Player{clientId}";
+        // ✅ 활성화 후 NetworkObject 스폰 (네트워크 로직은 Spawner가 담당)
+        _spawnFactory.ActivateBall(result);
 
-        // ✅ Start() 실행 방지를 위해 즉시 비활성화
-        ballObject.SetActive(false);
-
-        GameLogger.Warning("BrickGameMultiplayerSpawner", $"[DEBUG] Ball 생성 위치: clientId={clientId}, position={spawnPosition}");
-
-        // ✅ 1. PhysicsBall의 plank 참조를 Start() 전에 설정!
-        PhysicsBall ball = ballObject.GetComponent<PhysicsBall>();
-        PhysicsPlank plank = plankObject.GetComponent<PhysicsPlank>();
-
-        if (ball != null && plank != null)
-        {
-            // ✅ Plank 참조 먼저 설정
-            ball.SetPlankReference(plank);
-            GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] Ball → Plank 참조 연결 완료");
-        }
-        else
-        {
-            if (ball == null)
-                GameLogger.Error("BrickGameMultiplayerSpawner", $"[Player {clientId}] PhysicsBall 컴포넌트를 찾을 수 없습니다!");
-            if (plank == null)
-                GameLogger.Error("BrickGameMultiplayerSpawner", $"[Player {clientId}] PhysicsPlank 컴포넌트를 찾을 수 없습니다!");
-        }
-
-        // ✅ 이제 활성화 → Start() 실행 → plank 참조가 이미 설정되어 있음!
-        ballObject.SetActive(true);
-
-        // ✅ 2. NetworkObject 설정 및 Spawn
-        NetworkObject networkObject = ballObject.GetComponent<NetworkObject>();
+        // NetworkObject 설정 및 Spawn
+        NetworkObject networkObject = result.BallObject.GetComponent<NetworkObject>();
         if (networkObject == null)
         {
-            networkObject = ballObject.AddComponent<NetworkObject>();
+            networkObject = result.BallObject.AddComponent<NetworkObject>();
         }
 
-        // 스폰 (Owner 지정) - Plank 참조 설정 후 Spawn
+        // 스폰 (Owner 지정)
         networkObject.SpawnWithOwnership(clientId);
 
-        GameLogger.Info("BrickGameMultiplayerSpawner", $"  ⚽ Ball 스폰: {spawnPosition}");
+        GameLogger.Info("BrickGameMultiplayerSpawner",
+            $"  ⚽ Ball 네트워크 스폰 완료: {result.BallObject.transform.position}");
 
-        return ballObject;
+        return result.BallObject;
     }
 
     /// <summary>
@@ -540,6 +517,46 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         GameLogger.Success("BrickGameMultiplayerSpawner", $"[Player {clientId}] ObjectPlacement 생성 완료 (xOffset: {xOffset})");
 
         return placement;
+    }
+
+    /// <summary>
+    /// 플레이어별 물리 벽(borders) 생성 - Factory 패턴 사용
+    /// </summary>
+    private GameObject SpawnBordersForPlayer(ulong clientId, GameObject leftBound, GameObject rightBound)
+    {
+        float leftX = leftBound.transform.position.x;
+        float rightX = rightBound.transform.position.x;
+
+        // ✅ Factory를 통해 Borders 생성 (모듈화)
+        return _bordersFactory.CreateBorders(clientId, leftX, rightX, _plankYPosition);
+    }
+
+    /// <summary>
+    /// [ClientRpc] 모든 Client에서 벽 생성 (시각적 + 물리)
+    /// </summary>
+    [ClientRpc]
+    private void SpawnBordersClientRpc(ulong clientId, float leftX, float rightX, float plankY)
+    {
+        // ✅ Host(Server)는 이미 SpawnBordersForPlayer에서 생성했으므로 스킵
+        if (IsServer)
+        {
+            GameLogger.Info("BrickGameMultiplayerSpawner", $"[ClientRpc] Host는 이미 벽 생성됨 - 스킵");
+            return;
+        }
+
+        GameLogger.Info("BrickGameMultiplayerSpawner", $"[ClientRpc] Client에서 Player {clientId} 벽 생성 중...");
+
+        // Client에서도 같은 위치에 벽 생성
+        CreateBordersOnClient(clientId, leftX, rightX, plankY);
+    }
+
+    /// <summary>
+    /// Client-side 벽 생성 - Factory 패턴 사용
+    /// </summary>
+    private void CreateBordersOnClient(ulong clientId, float leftX, float rightX, float plankY)
+    {
+        // ✅ Factory를 통해 Client용 Borders 생성 (모듈화)
+        _bordersFactory.CreateBordersForClient(clientId, leftX, rightX, plankY);
     }
 
     /// <summary>
@@ -631,6 +648,12 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             if (objects.RightBoundary != null)
             {
                 Destroy(objects.RightBoundary);
+            }
+
+            // ✅ 플레이어별 물리 벽(borders) 제거
+            if (objects.BordersContainer != null)
+            {
+                Destroy(objects.BordersContainer);
             }
 
             _playerObjects.Remove(clientId);

@@ -9,7 +9,6 @@ public class BrickGameManager
 {
     #region 의존성 (Dependency Injection)
     private IBrickPlacer _brickPlacer;
-    private Unity.Netcode.NetworkManager _networkManager;
     private BrickGameNetworkSync _networkSync;
     #endregion
 
@@ -27,12 +26,13 @@ public class BrickGameManager
 
     /// <summary>
     /// 동기화된 점수 (멀티플레이어에서는 NetworkSync 우선)
+    /// ✅ MultiplayerUtil 사용
     /// </summary>
     public int Score
     {
         get
         {
-            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+            if (_networkSync != null && MultiplayerUtil.IsMultiplayer())
                 return _networkSync.Score;
             return _state.CurrentScore;
         }
@@ -40,12 +40,13 @@ public class BrickGameManager
 
     /// <summary>
     /// 동기화된 레벨 (멀티플레이어에서는 NetworkSync 우선)
+    /// ✅ MultiplayerUtil 사용
     /// </summary>
     public int Level
     {
         get
         {
-            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+            if (_networkSync != null && MultiplayerUtil.IsMultiplayer())
                 return _networkSync.Level;
             return _state.CurrentLevel;
         }
@@ -53,12 +54,13 @@ public class BrickGameManager
 
     /// <summary>
     /// 동기화된 게임 상태 (멀티플레이어에서는 NetworkSync 우선)
+    /// ✅ MultiplayerUtil 사용
     /// </summary>
     public GamePhase Phase
     {
         get
         {
-            if (_networkSync != null && _networkManager != null && _networkManager.IsListening)
+            if (_networkSync != null && MultiplayerUtil.IsMultiplayer())
                 return _networkSync.Phase;
             return _state.CurrentPhase;
         }
@@ -131,8 +133,7 @@ public class BrickGameManager
         _brickPlacer = brickPlacer;
         _settings = settings ?? BrickGameSettings.CreateDefault();
 
-        // NetworkManager 참조 저장 (멀티플레이어 체크용)
-        _networkManager = Unity.Netcode.NetworkManager.Singleton;
+        // ✅ NetworkManager 참조 제거: MultiplayerUtil 사용
 
         if (_brickPlacer == null)
         {
@@ -290,21 +291,19 @@ public class BrickGameManager
     /// <summary>
     /// 매 프레임 호출되는 업데이트 로직
     /// Managers.Subscribe(ActionId.System_Update, OnUpdate) 형태로 등록
+    /// ✅ MultiplayerUtil 사용
     /// </summary>
     public void OnUpdate()
     {
-        bool isClient = _networkManager != null && _networkManager.IsListening && !_networkManager.IsServer;
-        bool isMultiplayer = _networkManager != null && _networkManager.IsListening;
-
         // ✅ Plank 이동: 멀티플레이어에서는 PhysicsPlank.Update()가 직접 처리
         // 싱글플레이어에서만 PlankManager 사용
-        if (!isMultiplayer && _plankManager != null)
+        if (MultiplayerUtil.IsSinglePlayer() && _plankManager != null)
         {
             _plankManager.UpdateMovement(Time.deltaTime);
         }
 
         // 🔒 게임 로직은 Server만 실행 (Server Authority)
-        if (isClient)
+        if (!MultiplayerUtil.HasServerAuthority())
         {
             // Client는 PhysicsPlank가 직접 입력 처리
             return;

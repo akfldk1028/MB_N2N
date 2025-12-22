@@ -54,13 +54,16 @@ public class SimpleCubeGrid : MonoBehaviour
                 GameObject cube;
                 if (cubePrefab != null)
                 {
+                    
                     cube = Instantiate(cubePrefab, position, Quaternion.identity);
                 }
                 else
+                
                 {
                     cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     cube.transform.position = position;
                 }
+    
                 
                 cube.transform.localScale = Vector3.one * cubeScale;
                 cube.transform.parent = this.transform;

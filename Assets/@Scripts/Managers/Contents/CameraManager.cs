@@ -62,9 +62,16 @@ public class CameraManager
     /// <param name="localClientId">내 Client ID</param>
     public void SetupViewportsForLocalPlayer(ulong localClientId)
     {
+        // ✅ 카메라가 없으면 자동으로 Initialize 시도 (Client 타이밍 이슈 해결)
         if (_mainCamera == null || _subCamera == null)
         {
-            GameLogger.Error("CameraManager", "카메라가 초기화되지 않았습니다!");
+            GameLogger.Warning("CameraManager", "카메라가 없음 - Initialize 재시도...");
+            Initialize();
+        }
+
+        if (_mainCamera == null || _subCamera == null)
+        {
+            GameLogger.Error("CameraManager", "카메라 초기화 실패! Main/Sub 카메라를 찾을 수 없습니다.");
             return;
         }
 
@@ -90,11 +97,50 @@ public class CameraManager
         _subCamera.transform.position = subPos;
         _subCamera.transform.rotation = _mainCamera.transform.rotation;
 
-        // ✅ Viewport 설정 (항상 Main=왼쪽, Sub=오른쪽)
-        _mainCamera.rect = new Rect(0, 0, 0.3f, 1);      // 왼쪽 30% (내 게임)
-        _subCamera.rect = new Rect(0.7f, 0, 0.3f, 1);    // 오른쪽 30% (상대 게임)
+        // ✅ Aspect Ratio 유지 Viewport 설정
+        ApplyAspectRatioViewports();
 
         GameLogger.Success("CameraManager", $"[Client {localClientId}] Main(왼쪽, 내 영역 x={myOffset}) + Sub(오른쪽, 상대 영역 x={opponentOffset})");
+        GameLogger.Info("CameraManager", $"[DEBUG] Screen: {Screen.width}x{Screen.height}, Main rect: {_mainCamera.rect}, Sub rect: {_subCamera.rect}");
+    }
+
+    /// <summary>
+    /// Aspect Ratio를 유지하는 Viewport 설정
+    /// 게임 영역의 비율을 유지하면서 letterbox/pillarbox 적용
+    /// </summary>
+    private void ApplyAspectRatioViewports()
+    {
+        // 타겟 게임 비율 (세로형 블록깨기: 9:16 또는 유사)
+        float targetAspect = 9f / 16f;  // 0.5625
+
+        // 각 뷰포트 영역의 너비 비율 (30%)
+        float viewportWidth = 0.3f;
+
+        // 현재 화면 비율
+        float screenAspect = (float)Screen.width / Screen.height;
+
+        // 뷰포트 내부의 실제 비율 계산
+        // 뷰포트가 화면의 30%를 차지하므로, 뷰포트 내부 비율 = screenAspect * viewportWidth
+        float viewportAspect = screenAspect * viewportWidth;
+
+        float viewportHeight = 1f;
+        float yOffset = 0f;
+
+        // ✅ Letterbox 계산 (비율 유지)
+        if (viewportAspect > targetAspect)
+        {
+            // 뷰포트가 타겟보다 넓음 → 높이를 줄여서 letterbox
+            viewportHeight = targetAspect / viewportAspect;
+            yOffset = (1f - viewportHeight) / 2f;
+        }
+        // 뷰포트가 타겟보다 좁으면 → 그대로 사용 (pillarbox는 이미 뷰포트 너비로 처리됨)
+
+        // ✅ Viewport 적용 (왼쪽 30%, 오른쪽 30%, 중앙 40% 빈 공간)
+        _mainCamera.rect = new Rect(0, yOffset, viewportWidth, viewportHeight);
+        _subCamera.rect = new Rect(1f - viewportWidth, yOffset, viewportWidth, viewportHeight);
+
+        GameLogger.Info("CameraManager",
+            $"Viewport 설정: viewportAspect={viewportAspect:F2}, targetAspect={targetAspect:F2}, height={viewportHeight:F2}, yOffset={yOffset:F2}");
     }
 
     /// <summary>
