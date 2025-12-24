@@ -308,6 +308,35 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             SetupClientSideCameras();
             GameLogger.Success("BrickGameMultiplayerSpawner", "[Client] 점수 NetworkVariable 구독 완료");
         }
+
+        // ✅ HOST/CLIENT 모두: CentralMapBulletController 추가 (ActionBus 구독 + ServerRpc 호출용)
+        // 타이밍 문제 해결: GameScene.Start()보다 OnNetworkSpawn()이 더 확실함
+        InitializeCentralMapBulletController();
+    }
+
+    /// <summary>
+    /// CentralMapBulletController 초기화 (땅따먹기 총알 발사용)
+    /// HOST/CLIENT 모두 필요 (ActionBus 구독 + ServerRpc 호출)
+    /// </summary>
+    private void InitializeCentralMapBulletController()
+    {
+        // 이미 있는지 확인
+        var bulletController = GetComponent<CentralMapBulletController>();
+        if (bulletController != null)
+        {
+            GameLogger.Info("BrickGameMultiplayerSpawner", "CentralMapBulletController 이미 존재함");
+            return;
+        }
+
+        // AddComponent
+        bulletController = gameObject.AddComponent<CentralMapBulletController>();
+
+        // ✅ 이미 Spawn된 NetworkObject에 AddComponent하면 OnNetworkSpawn() 자동 호출 안됨!
+        // 수동 초기화 호출
+        bulletController.ManualInitialize();
+
+        GameLogger.Success("BrickGameMultiplayerSpawner",
+            $"[{(IsServer ? "HOST" : "CLIENT")}] CentralMapBulletController 추가 및 초기화 완료");
     }
 
     public override void OnNetworkDespawn()
@@ -824,4 +853,65 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         GameLogger.Success("BrickGameMultiplayerSpawner",
             $"[Client {localClientId}] 카메라 Viewport 설정 완료!");
     }
+
+    #region CentralMap ServerRpc (땅따먹기 총알 발사)
+    /// <summary>
+    /// [ServerRpc] 땅따먹기 총알 발사 요청
+    /// CentralMapBulletController에서 호출 (런타임 AddComponent된 NetworkBehaviour는 RPC 불가)
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestCentralMapFireServerRpc(ulong clientId, ServerRpcParams rpcParams = default)
+    {
+        GameLogger.Info("BrickGameMultiplayerSpawner", $"[ServerRpc] RequestCentralMapFireServerRpc 수신 - clientId={clientId}");
+
+        // CentralMapBulletController에 위임
+        var bulletController = GetComponent<CentralMapBulletController>();
+        if (bulletController != null)
+        {
+            GameLogger.Info("BrickGameMultiplayerSpawner", $"CentralMapBulletController 찾음, HandleFireRequestFromServer 호출");
+            bulletController.HandleFireRequestFromServer(clientId);
+        }
+        else
+        {
+            GameLogger.Error("BrickGameMultiplayerSpawner", "❌ CentralMapBulletController를 찾을 수 없습니다!");
+        }
+    }
+
+    /// <summary>
+    /// [ClientRpc] 블록 소유권 변경을 모든 클라이언트에 동기화
+    /// CannonBullet에서 호출 (SERVER에서 충돌 처리 후)
+    /// </summary>
+    [ClientRpc]
+    public void ChangeBlockOwnerClientRpc(string blockName, int newOwnerID, float r, float g, float b)
+    {
+        if (IsometricGridGenerator.Instance == null)
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", "IsometricGridGenerator.Instance가 null입니다");
+            return;
+        }
+
+        // 블록 이름으로 찾기
+        var block = IsometricGridGenerator.Instance.FindBlockByName(blockName);
+        if (block != null)
+        {
+            Color newColor = new Color(r, g, b);
+
+            // 렌더러 색상 변경
+            var renderer = block.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material.color = newColor;
+            }
+
+            // 소유권 데이터 변경
+            IsometricGridGenerator.Instance.SetBlockOwnerLocal(block, newOwnerID, newColor);
+
+            GameLogger.Info("BrickGameMultiplayerSpawner", $"[ClientRpc] 블록 {blockName} 소유권 변경: Player {newOwnerID}");
+        }
+        else
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", $"[ClientRpc] 블록 {blockName}을 찾을 수 없습니다");
+        }
+    }
+    #endregion
 }

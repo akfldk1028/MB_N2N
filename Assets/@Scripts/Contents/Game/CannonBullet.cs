@@ -1,32 +1,88 @@
 using UnityEngine;
+using Unity.Netcode;
 
-public class CannonBullet : MonoBehaviour
+/// <summary>
+/// 네트워크 동기화 총알 (땅따먹기 모드)
+///
+/// ✅ NetworkBehaviour 기반:
+/// - SERVER에서 Spawn() 후 모든 CLIENT에 동기화
+/// - direction, speed, ownerPlayerID를 NetworkVariable로 동기화
+/// - 충돌 처리는 SERVER에서만 수행
+/// </summary>
+public class CannonBullet : NetworkBehaviour
 {
     [Header("총알 설정")]
-    public float speed = 20f;
     public float lifetime = 5f;
     public int damage = 10;
     public GameObject hitEffect;
 
-    // 캐논 소유자 추적을 위한 변수
+    // ✅ NetworkVariable로 동기화되는 값들
+    private NetworkVariable<Vector3> _networkDirection = new NetworkVariable<Vector3>(
+        Vector3.zero,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<float> _networkSpeed = new NetworkVariable<float>(
+        20f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<int> _networkOwnerPlayerID = new NetworkVariable<int>(
+        -1,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<Color> _networkOwnerColor = new NetworkVariable<Color>(
+        Color.white,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<bool> _networkIsActive = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // ✅ 스폰 위치 동기화 (SynchronizeTransform 대신 사용)
+    private NetworkVariable<Vector3> _networkSpawnPosition = new NetworkVariable<Vector3>(
+        Vector3.zero,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // 로컬 캐시 (성능 최적화)
     [HideInInspector] public Cannon ownerCannon;
     [HideInInspector] public Color ownerColor;
-    [HideInInspector] public int ownerPlayerID = -1; // 멀티플레이어를 위한 ID 준비
+    [HideInInspector] public int ownerPlayerID = -1;
 
     private Vector3 direction;
+    private float speed = 20f;
     private bool isActive = false;
     private bool isDestroying = false;
+    private float spawnTime;
+
+    // ✅ Rigidbody 캐시 (MovePosition 사용을 위해)
+    private Rigidbody _rigidbody;
+    private int _moveLogCount = 0;  // 로그 카운터
 
     private void Awake()
     {
-        // 리지드바디 설정
-        Rigidbody rb = GetComponent<Rigidbody>();
-        if (rb != null)
+        // 리지드바디 설정 및 캐시
+        _rigidbody = GetComponent<Rigidbody>();
+        if (_rigidbody != null)
         {
-            rb.useGravity = false;
-            rb.isKinematic = true;
+            _rigidbody.useGravity = false;
+            _rigidbody.isKinematic = true;
+            // ✅ 충돌 감지 모드: Continuous로 설정하여 고속 이동 시에도 감지
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            // ✅ interpolation으로 부드러운 이동
+            _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
         }
-        
+
         // 콜라이더 설정
         Collider col = GetComponent<Collider>();
         if (col != null)
@@ -35,142 +91,377 @@ public class CannonBullet : MonoBehaviour
         }
     }
 
-    private void OnEnable()
+    public override void OnNetworkSpawn()
     {
-        isActive = false;
+        base.OnNetworkSpawn();
+
+        spawnTime = Time.time;
         isDestroying = false;
-        Destroy(gameObject, lifetime);
+
+        Debug.Log($"<color=cyan>[CannonBullet] OnNetworkSpawn 시작 - IsServer={IsServer}, IsClient={IsClient}, IsSpawned={IsSpawned}</color>");
+        Debug.Log($"<color=cyan>[CannonBullet] NetworkVariable 현재값 - isActive={_networkIsActive.Value}, dir={_networkDirection.Value}, speed={_networkSpeed.Value}</color>");
+
+        // ✅ NetworkVariable 변경 콜백 등록
+        _networkIsActive.OnValueChanged += OnActiveChanged;
+        _networkDirection.OnValueChanged += OnDirectionChanged;
+        _networkSpeed.OnValueChanged += OnSpeedChanged;
+        _networkOwnerPlayerID.OnValueChanged += OnOwnerChanged;
+        _networkOwnerColor.OnValueChanged += OnColorChanged;
+        _networkSpawnPosition.OnValueChanged += OnSpawnPositionChanged;
+
+        // ✅ CLIENT: 현재 값으로 초기화 (SERVER가 이미 설정했을 수 있음)
+        SyncFromNetworkVariables();
+
+        // ✅ CLIENT: 스폰 위치 즉시 적용 (SynchronizeTransform 대신)
+        if (!IsServer && _networkSpawnPosition.Value != Vector3.zero)
+        {
+            transform.position = _networkSpawnPosition.Value;
+            Debug.Log($"<color=green>[CannonBullet] CLIENT 스폰 위치 적용: {_networkSpawnPosition.Value}</color>");
+        }
+
+        Debug.Log($"<color=cyan>[CannonBullet] OnNetworkSpawn 완료 - 로컬 isActive={isActive}, dir={direction}</color>");
     }
 
-    // 총알 발사 메서드
+    public override void OnNetworkDespawn()
+    {
+        // 콜백 해제
+        _networkIsActive.OnValueChanged -= OnActiveChanged;
+        _networkDirection.OnValueChanged -= OnDirectionChanged;
+        _networkSpeed.OnValueChanged -= OnSpeedChanged;
+        _networkOwnerPlayerID.OnValueChanged -= OnOwnerChanged;
+        _networkOwnerColor.OnValueChanged -= OnColorChanged;
+        _networkSpawnPosition.OnValueChanged -= OnSpawnPositionChanged;
+
+        base.OnNetworkDespawn();
+    }
+
+    /// <summary>
+    /// NetworkVariable 값을 로컬 변수로 동기화
+    /// </summary>
+    private void SyncFromNetworkVariables()
+    {
+        direction = _networkDirection.Value;
+        speed = _networkSpeed.Value;
+        ownerPlayerID = _networkOwnerPlayerID.Value;
+        ownerColor = _networkOwnerColor.Value;
+        isActive = _networkIsActive.Value;
+
+        // 색상 적용
+        ApplyColor(ownerColor);
+    }
+
+    #region NetworkVariable Callbacks
+    private void OnActiveChanged(bool oldValue, bool newValue)
+    {
+        isActive = newValue;
+        Debug.Log($"<color=yellow>[CannonBullet] isActive 변경: {oldValue} → {newValue}</color>");
+    }
+
+    private void OnDirectionChanged(Vector3 oldValue, Vector3 newValue)
+    {
+        direction = newValue;
+    }
+
+    private void OnSpeedChanged(float oldValue, float newValue)
+    {
+        speed = newValue;
+    }
+
+    private void OnOwnerChanged(int oldValue, int newValue)
+    {
+        ownerPlayerID = newValue;
+    }
+
+    private void OnColorChanged(Color oldValue, Color newValue)
+    {
+        ownerColor = newValue;
+        ApplyColor(newValue);
+    }
+
+    private void OnSpawnPositionChanged(Vector3 oldValue, Vector3 newValue)
+    {
+        // CLIENT에서만 위치 적용 (SERVER는 이미 올바른 위치에 있음)
+        if (!IsServer && newValue != Vector3.zero)
+        {
+            transform.position = newValue;
+            Debug.Log($"<color=green>[CannonBullet] 위치 동기화: {newValue}</color>");
+        }
+    }
+    #endregion
+
+    /// <summary>
+    /// 총알 발사 (SERVER에서 호출)
+    /// </summary>
     public void Fire(Vector3 dir, float spd = 0)
     {
+        Debug.Log($"<color=magenta>[CannonBullet] Fire() 시작 - IsServer={IsServer}, IsSpawned={IsSpawned}, dir={dir}, spd={spd}</color>");
+
+        // ✅ SERVER에서만 NetworkVariable 설정
+        if (IsServer)
+        {
+            _networkDirection.Value = dir.normalized;
+            if (spd > 0) _networkSpeed.Value = spd;
+            _networkIsActive.Value = true;
+            // ✅ 스폰 위치 동기화 (CLIENT가 올바른 위치에서 시작하도록)
+            _networkSpawnPosition.Value = transform.position;
+            Debug.Log($"<color=green>[CannonBullet] NetworkVariable 설정 완료 - dir={_networkDirection.Value}, speed={_networkSpeed.Value}, pos={_networkSpawnPosition.Value}, isActive={_networkIsActive.Value}</color>");
+        }
+        else
+        {
+            Debug.LogWarning($"<color=red>[CannonBullet] Fire()가 IsServer=false에서 호출됨! NetworkVariable 설정 스킵</color>");
+        }
+
+        // 로컬 값도 즉시 설정 (SERVER 측 응답성)
         direction = dir.normalized;
         if (spd > 0) speed = spd;
         isActive = true;
     }
 
-    // 소유자 설정 메서드
+    /// <summary>
+    /// 소유자 설정 (SERVER에서 호출)
+    /// </summary>
     public void SetOwner(Cannon cannon, Color color, int playerID = -1)
     {
-        // 소유자 정보 설정
         ownerCannon = cannon;
+
+        // ✅ SERVER에서만 NetworkVariable 설정
+        if (IsServer)
+        {
+            _networkOwnerPlayerID.Value = playerID;
+            _networkOwnerColor.Value = color;
+        }
+
+        // 로컬 값도 설정
         ownerColor = color;
         ownerPlayerID = playerID;
-        
-        // 디버그 정보 출력
-        Debug.Log($"<color=yellow>[CannonBullet] 총알 소유자 설정 - ID: {playerID}, 색상: R:{color.r}, G:{color.g}, B:{color.b}</color>");
-        
-        // 총알 자체에 색상 적용
+
+        Debug.Log($"<color=yellow>[CannonBullet] SetOwner - ID={playerID}, IsServer={IsServer}</color>");
+
+        ApplyColor(color);
+    }
+
+    /// <summary>
+    /// 색상 적용
+    /// </summary>
+    private void ApplyColor(Color color)
+    {
         Renderer renderer = GetComponent<Renderer>();
+        if (renderer == null)
+        {
+            renderer = GetComponentInChildren<Renderer>();
+        }
+
         if (renderer != null)
         {
             renderer.material.color = color;
-            Debug.Log($"<color=green>[CannonBullet] 총알 색상 적용 완료</color>");
-        }
-        else
-        {
-            Debug.LogWarning($"<color=red>[CannonBullet] 총알에 렌더러가 없어서 색상을 적용할 수 없습니다</color>");
         }
     }
 
     private void Update()
     {
-        if (!isActive || isDestroying) return;
-        
-        // 단순하게 방향으로 이동
-        transform.position += direction * speed * Time.deltaTime;
+        // ✅ lifetime 체크만 Update에서 수행 (SERVER에서만 Despawn)
+        if (IsServer && !isDestroying && Time.time - spawnTime > lifetime)
+        {
+            DestroyBullet();
+        }
+    }
+
+    /// <summary>
+    /// 물리 기반 이동 (FixedUpdate에서 실행해야 충돌 감지 정상 작동)
+    /// </summary>
+    private void FixedUpdate()
+    {
+        // ✅ NetworkVariable 값 직접 사용 (로컬 캐시 타이밍 문제 해결)
+        bool currentIsActive = _networkIsActive.Value;
+        Vector3 currentDirection = _networkDirection.Value;
+        float currentSpeed = _networkSpeed.Value;
+
+        if (!currentIsActive || isDestroying) return;
+
+        // ✅ direction이 zero면 이동하지 않음 (아직 Fire 안 됨)
+        if (currentDirection.sqrMagnitude < 0.01f) return;
+
+        // ✅ Rigidbody.MovePosition 사용 (물리 엔진이 충돌 감지)
+        if (_rigidbody != null)
+        {
+            Vector3 newPosition = _rigidbody.position + currentDirection * currentSpeed * Time.fixedDeltaTime;
+            _rigidbody.MovePosition(newPosition);
+
+            // 처음 5프레임만 로그 (과도한 로그 방지)
+            if (_moveLogCount < 5)
+            {
+                Debug.Log($"<color=cyan>[CannonBullet] FixedUpdate 이동: pos={_rigidbody.position}, dir={currentDirection}, speed={currentSpeed}</color>");
+                _moveLogCount++;
+            }
+        }
+        else
+        {
+            // Fallback: Rigidbody 없으면 직접 이동 (충돌 감지 안될 수 있음)
+            Debug.LogWarning("[CannonBullet] ❌ Rigidbody 없음! transform.position 직접 이동");
+            transform.position += currentDirection * currentSpeed * Time.fixedDeltaTime;
+        }
     }
 
     private void OnTriggerEnter(Collider other)
     {
+        // ✅ 모든 충돌 로그 (SERVER/CLIENT 상관없이)
+        Debug.Log($"<color=magenta>[CannonBullet] OnTriggerEnter 호출됨! other={other.name}, IsServer={IsServer}, isDestroying={isDestroying}</color>");
+
         if (isDestroying) return;
-        
+
+        // ✅ SERVER에서만 충돌 처리 (블록 소유권 변경은 서버 권한)
+        if (!IsServer)
+        {
+            Debug.Log($"<color=gray>[CannonBullet] CLIENT에서 충돌 감지 - 처리는 SERVER에서</color>");
+            return;
+        }
+
         HandleHit(other.gameObject);
     }
 
     private void HandleHit(GameObject hitObject)
     {
         if (isDestroying || hitObject == null) return;
-        
+
+        // ✅ 충돌 디버그 로그 (무엇과 충돌했는지 확인)
+        Debug.Log($"<color=yellow>[CannonBullet] 충돌 감지! hitObject={hitObject.name}, tag={hitObject.tag}, " +
+                  $"hasParent={hitObject.transform.parent != null}, " +
+                  $"parentName={(hitObject.transform.parent != null ? hitObject.transform.parent.name : "none")}</color>");
+
         // 다른 총알과 충돌 무시
-        if (hitObject.GetComponent<CannonBullet>() != null) {
+        if (hitObject.GetComponent<CannonBullet>() != null)
+        {
+            Debug.Log($"<color=gray>[CannonBullet] 다른 총알과 충돌 - 무시</color>");
             DestroyBullet();
             return;
         }
-        
+
         // 벽과 충돌 시 파괴
         if (hitObject.CompareTag("Wall"))
         {
             DestroyBullet();
             return;
         }
-        
-        // 그리드 블록과 충돌 처리
-        if (hitObject.CompareTag("GridBlock") || (hitObject.transform.parent != null && hitObject.transform.parent.GetComponent<IsometricGridGenerator>() != null))
+
+        // ★★★ 대포 충돌 처리 (게임 오버 조건) ★★★
+        Cannon hitCannon = hitObject.GetComponent<Cannon>();
+        if (hitCannon == null)
         {
-            // IsometricGridGenerator가 있는지 확인
+            hitCannon = hitObject.GetComponentInParent<Cannon>();
+        }
+
+        if (hitCannon != null)
+        {
+            // 자신의 대포면 통과
+            if (hitCannon.playerID == ownerPlayerID)
+            {
+                return;
+            }
+
+            // 상대방 대포 명중!
+            Debug.Log($"<color=red>[CannonBullet] ★★★ 상대방 대포 명중! Player {hitCannon.playerID} ★★★</color>");
+            hitCannon.TakeDamage(damage);
+            DestroyBullet();
+            return;
+        }
+
+        // 그리드 블록과 충돌 처리
+        bool isGridBlock = hitObject.CompareTag("GridBlock");
+        bool hasGridGenerator = hitObject.transform.parent != null &&
+                                hitObject.transform.parent.GetComponent<IsometricGridGenerator>() != null;
+
+        Debug.Log($"<color=orange>[CannonBullet] GridBlock 체크: tag={hitObject.tag}, isGridBlock={isGridBlock}, hasGridGenerator={hasGridGenerator}</color>");
+
+        if (isGridBlock || hasGridGenerator)
+        {
+            Debug.Log($"<color=green>[CannonBullet] ✅ GridBlock 조건 충족! 소유권 변경 처리 시작</color>");
+
             if (IsometricGridGenerator.Instance == null)
             {
-                Debug.LogError("<color=red>오류: IsometricGridGenerator Instance 없음!</color>");
+                Debug.LogError("[CannonBullet] ❌ IsometricGridGenerator.Instance가 null!");
                 DestroyBullet();
                 return;
             }
-            
-            // 블록 소유자 확인
+
             int blockOwnerID = IsometricGridGenerator.Instance.GetBlockOwner(hitObject);
-            
-            // *** 상세 로그 추가 ***
-            Debug.Log($"<color=#FFA500>충돌 정보: 총알 소유자 ID={ownerPlayerID}, 충돌 블록 이름={hitObject.name}, 블록 소유자 ID={blockOwnerID}</color>");
-            
-            // 자신의 블록인지 확인
+
+            // ✅ 상세 디버그 로그
+            Debug.Log($"<color=yellow>[CannonBullet] 블록 충돌 분석:</color>\n" +
+                      $"  - hitObject.name: {hitObject.name}\n" +
+                      $"  - blockOwnerID: {blockOwnerID}\n" +
+                      $"  - 총알 ownerPlayerID: {ownerPlayerID}\n" +
+                      $"  - 총알 ownerColor: {ownerColor}\n" +
+                      $"  - 총알 위치: {transform.position}\n" +
+                      $"  - 블록 위치: {hitObject.transform.position}");
+
+            // 자신의 블록이면 통과
             if (blockOwnerID == ownerPlayerID && ownerPlayerID >= 0)
             {
-                // *** 상세 로그 추가 ***
-                Debug.Log("<color=yellow>내 블록 충돌! 통과 처리.</color>");
-                // 자신의 블록이면 아무것도 하지 않고 통과 (return 전에 isDestroying=false 필요 없음)
+                Debug.Log($"<color=gray>[CannonBullet] 자신의 블록 (소유자={blockOwnerID}) - 통과</color>");
                 return;
             }
-            
-            // 중립(-1) 또는 상대방 블록인 경우에만 색상 변경
-            Debug.Log("<color=cyan>상대방 또는 중립 블록 충돌! 색상/소유권 변경 처리 시작.</color>");
-            Renderer blockRenderer = hitObject.GetComponent<Renderer>();
-            if (blockRenderer != null)
+
+            // ✅ 중립(-1) 또는 상대방 블록인 경우 소유권 변경
+            Debug.Log($"<color=lime>[CannonBullet] ★ 상대방/중립 블록 점령! {hitObject.name}: 소유자 {blockOwnerID} → {ownerPlayerID}</color>");
+
+            // ✅ ClientRpc로 모든 클라이언트에 동기화
+            var spawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+            if (spawner != null)
             {
-                Color oldColor = blockRenderer.material.color;
-                blockRenderer.material.color = ownerColor;
-                Debug.Log($"<color=green>블록 색상 변경 완료: {oldColor} -> {ownerColor}</color>");
+                spawner.ChangeBlockOwnerClientRpc(
+                    hitObject.name,
+                    ownerPlayerID,
+                    ownerColor.r,
+                    ownerColor.g,
+                    ownerColor.b
+                );
             }
-            
-            // 소유권 변경
-            IsometricGridGenerator.Instance.SetBlockOwner(hitObject, ownerPlayerID, ownerColor);
-            Debug.Log($"<color=magenta>블록 소유권 변경 완료: {blockOwnerID} -> {ownerPlayerID}</color>");
-            
-            // 충돌 효과 생성 (이펙트가 있다면)
+            else
+            {
+                // Fallback: 로컬에서만 변경
+                Renderer blockRenderer = hitObject.GetComponent<Renderer>();
+                if (blockRenderer != null)
+                {
+                    blockRenderer.material.color = ownerColor;
+                }
+                IsometricGridGenerator.Instance.SetBlockOwner(hitObject, ownerPlayerID, ownerColor);
+            }
+
+            // 충돌 효과 생성
             if (hitEffect != null)
             {
                 Instantiate(hitEffect, transform.position, Quaternion.identity);
             }
-            
-            // 상대방/중립 블록과 충돌 후 총알 파괴
+
             DestroyBullet();
         }
-    }
-    
-    private void DestroyBullet()
-    {
-        if (!isDestroying)
+        else
         {
-            isDestroying = true;
-            isActive = false;
-            
-            // 이펙트 생성
-            if (hitEffect != null)
-            {
-                Instantiate(hitEffect, transform.position, Quaternion.identity);
-            }
-            
-            Destroy(gameObject);
+            // ✅ GridBlock이 아닌 다른 물체와 충돌 - 무시 (통과)
+            Debug.Log($"<color=gray>[CannonBullet] GridBlock 아님 - 통과 (tag={hitObject.tag})</color>");
         }
     }
-} 
+
+    private void DestroyBullet()
+    {
+        if (isDestroying) return;
+
+        // ✅ SERVER에서만 Despawn 가능
+        if (!IsServer) return;
+
+        isDestroying = true;
+        _networkIsActive.Value = false;
+
+        // 이펙트 생성
+        if (hitEffect != null)
+        {
+            Instantiate(hitEffect, transform.position, Quaternion.identity);
+        }
+
+        // ✅ NetworkObject Despawn (CLIENT에도 자동 동기화됨)
+        if (IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
+    }
+}

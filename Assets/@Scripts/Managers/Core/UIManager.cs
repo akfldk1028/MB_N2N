@@ -27,9 +27,19 @@ using UnityEngine.UI;
 
 public class UIManager
 {
+	#region Sub-Managers (계층적 구조)
+	private BrickGameUIManager _brickGame = new BrickGameUIManager();
+
+	/// <summary>
+	/// BrickGame UI 매니저
+	/// Managers.UI.BrickGame 으로 접근
+	/// </summary>
+	public BrickGameUIManager BrickGame => _brickGame;
+	#endregion
+
 	public UIManager()
 	{
-		GameLogger.SystemStart("UIManager", "생성됨");
+		GameLogger.SystemStart("UIManager", "생성됨 (BrickGame UI 포함)");
 	}
 
 	private int _order = 10;

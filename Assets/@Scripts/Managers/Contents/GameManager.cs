@@ -33,9 +33,13 @@ public class GameManager
 	private Dictionary<ulong, BrickGameManager> _playerGames = new Dictionary<ulong, BrickGameManager>();
 	private Dictionary<ulong, System.IDisposable> _playerGameSubscriptions = new Dictionary<ulong, System.IDisposable>();
 
+	// ✅ 게임 규칙 매니저 (점수→총알 등)
+	private GameRuleManager _rules = new GameRuleManager();
+	public GameRuleManager Rules => _rules;
+
 	public GameManager()
 	{
-		Debug.Log("<color=yellow>[GameManager]</color> 생성됨");
+		Debug.Log("<color=yellow>[GameManager]</color> 생성됨 (GameRuleManager 포함)");
 	}
 
 	/// <summary>

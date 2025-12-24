@@ -11,13 +11,32 @@ namespace Unity.Assets.Scripts.Objects
         // 게임 오버가 발생하는 Y 경계선 (ObjectPlacement와 동일한 값 사용)
         private const float bottomBoundary = -2.3f;
         private bool isGameOverTriggered = false; // 게임 오버 중복 호출 방지
-        
+
         // BricksWave 로직 통합
         private int wave = 1;
         private int originalWave = 1; // 원래 wave 값 저장 (점수 계산용)
         private TextMeshPro waveText;
         private AudioSource brickHitSound;
         [SerializeField] private Renderer brickRenderer; // Reference to the brick's renderer for color changes
+
+        #region Public Properties (총알 시스템용)
+        /// <summary>
+        /// 벽돌 소유자 Client ID (NetworkObject에서 가져옴)
+        /// </summary>
+        public ulong OwnerClientId
+        {
+            get
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                return netObj != null ? netObj.OwnerClientId : 0;
+            }
+        }
+
+        /// <summary>
+        /// 현재 체력 (wave)
+        /// </summary>
+        public int Health => wave;
+        #endregion
         
         private void Start()
         {
@@ -199,6 +218,35 @@ namespace Unity.Assets.Scripts.Objects
                 Managers.Game?.BrickGame?.AddScore(score);
             }
         }
+
+        #region Public Methods (총알 시스템용)
+        /// <summary>
+        /// 외부에서 데미지를 주는 메서드 (총알 충돌 등)
+        /// </summary>
+        /// <param name="damage">데미지 양</param>
+        public void TakeDamage(int damage)
+        {
+            if (damage <= 0) return;
+
+            wave -= damage;
+            ColorBrick();
+
+            if (waveText != null)
+            {
+                waveText.text = wave.ToString();
+            }
+
+            GameLogger.DevLog("Brick", $"[{gameObject.name}] 데미지 {damage} 받음, 남은 체력: {wave}");
+
+            if (wave <= 0)
+            {
+                // 점수 추가 (원래 wave 값 기준)
+                AddScoreToPlayer(originalWave);
+                HandleBrickDestruction();
+                Destroy(gameObject);
+            }
+        }
+        #endregion
 
         /// <summary>
         /// 벽돌이 파괴될 때 호출되는 로직

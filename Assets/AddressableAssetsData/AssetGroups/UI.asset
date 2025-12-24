@@ -14,7 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_GroupName: UI
   m_GUID: 3b7854348e548ae4dbc40f8559d0676b
-  m_SerializeEntries: []
+  m_SerializeEntries:
+  - m_GUID: 0767d17317b9a1f46aacea61235c1348
+    m_Address: UI_BrickGameScene
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - PreLoad
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 3b34cd1d0f58d714b8b4fcf9c86bdbb4, type: 2}
   m_SchemaSet:

@@ -27,6 +27,8 @@ namespace MB.Infrastructure.Messages
         Input_RhythmGameStart,    // Space키 리듬게임 시작
         Input_RhythmGameSkip,     // Tab키 리듬게임 스킵
         Input_RhythmGameExit,     // Esc키 리듬게임 종료
+        Input_Fire,               // Space키 발사 (BrickGame 대포)
+        Input_CentralMapFire,     // Enter키 발사 (땅따먹기 대포)
 
         // ✅ BrickGame 이벤트 (멀티플레이어 동기화)
         BrickGame_ScoreChanged,      // 점수 변경 (네트워크 동기화 필수)
@@ -34,7 +36,9 @@ namespace MB.Infrastructure.Messages
         BrickGame_GameStateChanged,  // 게임 상태 변경 (Playing, Paused, GameOver 등)
         BrickGame_RowSpawned,        // 새 행 생성됨
         BrickGame_BrickDestroyed,    // 벽돌 파괴됨
-        BrickGame_TerritoryChanged   // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
+        BrickGame_TerritoryChanged,  // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
+        BrickGame_BulletFired,       // 총알 발사됨 (GameRule에서 발행)
+        BrickGame_GameOver           // 게임 오버 (대포 파괴됨)
     }
 
     public interface IActionPayload { }
@@ -111,6 +115,22 @@ namespace MB.Infrastructure.Messages
             ScoreValue = scoreValue;
         }
     }
+
+    /// <summary>
+    /// 총알 발사 (발사한 플레이어, 발사 개수)
+    /// </summary>
+    public readonly struct BulletFiredPayload : IActionPayload
+    {
+        public ulong FiringClientId { get; }
+        public int BulletCount { get; }
+
+        public BulletFiredPayload(ulong firingClientId, int bulletCount)
+        {
+            FiringClientId = firingClientId;
+            BulletCount = bulletCount;
+        }
+    }
+
     public readonly struct ActionMessage
     {
         public ActionId Id { get; }
