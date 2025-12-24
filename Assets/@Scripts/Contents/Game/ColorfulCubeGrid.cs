@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic; // List를 사용하기 위해 추가
 using static Define; // MATCHMAKING_PLAYER_COUNT 사용
 
-public class IsometricGridGenerator : MonoBehaviour
+public class IsometricGridGenerator : MonoBehaviour, IMap
 {
     [Header("Grid Settings")]
     public GameObject cubePrefab;
@@ -22,9 +22,16 @@ public class IsometricGridGenerator : MonoBehaviour
     [Header("Material Settings")] // 머티리얼 설정을 위한 헤더 추가
     public Material borderMaterial; // BorderMaterial 참조 변수 추가
 
+    [Header("Config (Optional)")]
+    [Tooltip("ScriptableObject로 색상 관리. 비워두면 기존 하드코딩 색상 사용")]
+    [SerializeField] private PlayerColorConfig colorConfig;
+
+    [Tooltip("ScriptableObject로 그리드 설정 관리. 비워두면 Inspector 값 사용")]
+    [SerializeField] private GridConfig gridConfig;
+
     [Header("Turret Settings")] // 터렛 설정 추가
     public GameObject standardTurretPrefab; // Standard Turret 프리팹 참조
-    public float turretHeightOffset = 0.5f; // 터렛 배치 높이 오프셋
+    public float turretHeightOffset = 0f; // 터렛 배치 높이 오프셋 (0 = 바닥)
 
     [Header("Bullet Settings")] // 총알 설정 추가
     public GameObject bulletPrefab; // 총알 프리팹 (Cannon에서 사용)
@@ -79,7 +86,12 @@ public class IsometricGridGenerator : MonoBehaviour
 
         // ✅ 프리팹용 오브젝트 생성 (활성화 상태로 - NetworkObject Spawn 시 필요)
         bulletPrefab = new GameObject("CannonBulletPrefab");
-        // ❌ SetActive(false) 제거 - 비활성화 상태에서 NetworkObject Spawn하면 에러 발생
+
+        // ✅ 씬에서 숨기기 - Hierarchy에 안 보이고 저장 안 됨
+        bulletPrefab.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSave;
+
+        // ✅ 화면 밖으로 이동 (프리팹 템플릿이므로 보일 필요 없음)
+        bulletPrefab.transform.position = new Vector3(-9999, -9999, -9999);
 
         // CannonBullet 스크립트 추가
         bulletPrefab.AddComponent<CannonBullet>();
@@ -119,6 +131,9 @@ public class IsometricGridGenerator : MonoBehaviour
 
     void Start()
     {
+        // ✅ Managers.Map에 현재 맵 등록
+        Managers.Map?.SetCurrentMap(this);
+
         // borderMaterial이 할당되었는지 확인
         if (borderMaterial == null)
         {
@@ -126,6 +141,9 @@ public class IsometricGridGenerator : MonoBehaviour
             enabled = false; // 오류 발생 시 스크립트 비활성화
             return;
         }
+
+        // ✅ GridConfig가 있으면 값 적용 (Optional)
+        ApplyGridConfig();
 
         // ✅ 플레이어 수를 Define에서 강제로 가져오기 (Inspector 값 무시)
         // 참고: 그리드는 시각적 요소이므로 HOST/CLIENT 모두 로컬에서 생성
@@ -135,12 +153,73 @@ public class IsometricGridGenerator : MonoBehaviour
 
         CreateGrid();
 
+        // ✅ 맵 컴포넌트 등록 (BOMB, HARVEST 등)
+        RegisterMapComponents();
+
         // ✅ CLIENT: SERVER가 Spawn한 캐논들을 찾기 위해 지연 호출
         var netManager = Unity.Netcode.NetworkManager.Singleton;
         if (netManager != null && netManager.IsClient && !netManager.IsServer)
         {
             StartCoroutine(DelayedRefreshCannons());
         }
+    }
+
+    /// <summary>
+    /// GridConfig ScriptableObject 값 적용 (Optional)
+    /// </summary>
+    private void ApplyGridConfig()
+    {
+        if (gridConfig == null)
+        {
+            Debug.Log("<color=yellow>[IsometricGridGenerator] gridConfig 미설정 - Inspector 값 사용</color>");
+            return;
+        }
+
+        gridSizeX = gridConfig.gridSizeX;
+        gridSizeY = gridConfig.gridSizeY;
+        cubeSize = gridConfig.cubeSize;
+        spacing = gridConfig.spacing;
+        gridHeight = gridConfig.gridHeight;
+        aspectRatio = gridConfig.aspectRatio;
+        turretHeightOffset = gridConfig.turretHeightOffset;
+        wallHeight = gridConfig.wallHeight;
+
+        Debug.Log($"<color=cyan>[IsometricGridGenerator] gridConfig 적용 - Size({gridSizeX}x{gridSizeY})</color>");
+    }
+
+    /// <summary>
+    /// 맵 컴포넌트 등록 (BOMB, HARVEST 등)
+    /// 각 플레이어에게 BombComponent와 HarvestComponent를 생성하여 등록
+    /// </summary>
+    private void RegisterMapComponents()
+    {
+        if (Managers.Map?.Components == null)
+        {
+            Debug.LogWarning("[IsometricGridGenerator] MapComponentManager 없음 - 컴포넌트 등록 스킵");
+            return;
+        }
+
+        // 컴포넌트 홀더 GameObject 생성 (정리용)
+        var componentHolder = new GameObject("MapComponents");
+        componentHolder.transform.SetParent(transform);
+
+        // 각 플레이어에게 컴포넌트 등록
+        for (int playerID = 0; playerID < playerCount; playerID++)
+        {
+            // BombComponent 생성 및 등록
+            var bombGO = new GameObject($"BombComponent_P{playerID}");
+            bombGO.transform.SetParent(componentHolder.transform);
+            var bombComponent = bombGO.AddComponent<BombComponent>();
+            Managers.Map.Components.Register(bombComponent, playerID);
+
+            // HarvestComponent 생성 및 등록
+            var harvestGO = new GameObject($"HarvestComponent_P{playerID}");
+            harvestGO.transform.SetParent(componentHolder.transform);
+            var harvestComponent = harvestGO.AddComponent<HarvestComponent>();
+            Managers.Map.Components.Register(harvestComponent, playerID);
+        }
+
+        Debug.Log($"<color=magenta>[IsometricGridGenerator] 맵 컴포넌트 등록 완료 - {playerCount}명 × 2개 = {Managers.Map.Components.Count}개</color>");
     }
 
     /// <summary>
@@ -162,6 +241,9 @@ public class IsometricGridGenerator : MonoBehaviour
 
     void Update()
     {
+        // ✅ MapComponentManager Tick 호출 (쿨다운, 충전 등)
+        Managers.Map?.Components?.Tick(Time.deltaTime);
+
         // ✅ 멀티플레이어에서는 CentralMapBulletController가 Enter 키 처리
         //    (GameScene.Update → ActionBus → CentralMapBulletController → ServerRpc)
         //    여기서 중복 처리하면 로컬 Instantiate가 발생하여 문제 발생!
@@ -325,7 +407,7 @@ public class IsometricGridGenerator : MonoBehaviour
         {
             // 모서리 좌표 계산 (타일 중심 기준)
             float halfCubeSize = cubeSize / 2f;
-            float turretYPos = gridHeight + turretHeightOffset; // 타일 높이 위에 배치
+            float turretYPos = turretHeightOffset; // Y = 0 (기본), Inspector에서 조정 가능
 
             // 각 모서리 중심 좌표
             Vector3 bottomLeftPos = new Vector3(startX + halfCubeSize, turretYPos, startZ + halfCubeSize);
@@ -527,7 +609,19 @@ public class IsometricGridGenerator : MonoBehaviour
     private void DefinePlayerColors()
     {
         _playerColors.Clear();
-        
+
+        // ✅ ScriptableObject 설정이 있으면 사용
+        if (colorConfig != null && colorConfig.playerColors != null && colorConfig.playerColors.Length > 0)
+        {
+            foreach (var pc in colorConfig.playerColors)
+            {
+                _playerColors[pc.playerID] = pc.color;
+            }
+            Debug.Log($"<color=cyan>[IsometricGridGenerator] colorConfig에서 {colorConfig.playerColors.Length}개 색상 로드</color>");
+            return;
+        }
+
+        // ✅ Fallback: 기존 하드코딩 색상
         // 플레이어 수에 따라 색상 정의
         if (playerCount == 2)
         {
@@ -719,17 +813,27 @@ public class IsometricGridGenerator : MonoBehaviour
     public bool SetBlockOwner(GameObject block, int playerID, Color playerColor)
     {
         if (block == null) return false;
-        
+
+        // 이전 소유자 저장 (이벤트 전파용)
+        int oldOwnerID = -1;
+        if (_blockOwners.TryGetValue(block, out int existingOwner))
+        {
+            oldOwnerID = existingOwner;
+        }
+
         // 블록 소유권 업데이트
         _blockOwners[block] = playerID;
-        
+
         // 블록 색상 변경 (이미 Renderer에서 설정했지만 백업으로 유지)
         Renderer renderer = block.GetComponent<Renderer>();
         if (renderer != null)
         {
             renderer.material.color = playerColor;
         }
-        
+
+        // ✅ 컴포넌트에 블록 점령 이벤트 전파 (HarvestComponent 충전 등)
+        Managers.Map?.Components?.NotifyBlockCaptured(block, oldOwnerID, playerID);
+
         Debug.Log($"<color=magenta>[IsometricGridGenerator] 블록 {block.name}의 소유권이 플레이어 {playerID}로 변경됨</color>");
         return true;
     }
@@ -844,8 +948,8 @@ public class IsometricGridGenerator : MonoBehaviour
         // 제거할 수 있는 만큼만 제거
         int removeCount = Mathf.Min(count, playerBlocks.Count);
 
-        // 중립 색상 (회색)
-        Color neutralColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+        // 중립 색상 (config에서 가져오거나 기본 회색)
+        Color neutralColor = colorConfig != null ? colorConfig.neutralColor : new Color(0.5f, 0.5f, 0.5f, 1f);
 
         for (int i = 0; i < removeCount; i++)
         {

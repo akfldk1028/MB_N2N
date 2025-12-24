@@ -50,6 +50,7 @@ public class CentralMapBulletController : NetworkBehaviour
     private Dictionary<int, Cannon> _playerCannons = new Dictionary<int, Cannon>();
     private Dictionary<ulong, bool> _isFiring = new Dictionary<ulong, bool>(); // 발사 중 여부
     private IDisposable _bulletFiredSubscription;
+    private IDisposable _mapComponentSubscription;  // 맵 컴포넌트 구독
     #endregion
 
     #region Properties
@@ -104,6 +105,12 @@ public class CentralMapBulletController : NetworkBehaviour
         _bulletFiredSubscription = Managers.Subscribe(
             ActionId.Input_CentralMapFire,
             OnCentralMapFireInput
+        );
+
+        // ActionBus 구독: Input_UseMapComponent 이벤트 (B키=BOMB, H키=HARVEST)
+        _mapComponentSubscription = Managers.Subscribe(
+            ActionId.Input_UseMapComponent,
+            OnMapComponentInput
         );
 
         // 총알 프리팹 생성 (없으면)
@@ -232,6 +239,9 @@ public class CentralMapBulletController : NetworkBehaviour
         _bulletFiredSubscription?.Dispose();
         _bulletFiredSubscription = null;
 
+        _mapComponentSubscription?.Dispose();
+        _mapComponentSubscription = null;
+
         base.OnNetworkDespawn();
     }
 
@@ -257,6 +267,43 @@ public class CentralMapBulletController : NetworkBehaviour
         if (spawner != null)
         {
             spawner.RequestCentralMapFireServerRpc(localClientId);
+        }
+        else
+        {
+            GameLogger.Error("CentralMapBulletController", "BrickGameMultiplayerSpawner를 찾을 수 없습니다!");
+        }
+    }
+
+    /// <summary>
+    /// ActionBus에서 Input_UseMapComponent 이벤트 수신 (B키=BOMB, H키=HARVEST)
+    /// </summary>
+    private void OnMapComponentInput(ActionMessage message)
+    {
+        if (_isGameOver.Value)
+        {
+            GameLogger.Warning("CentralMapBulletController", "게임 오버 - 컴포넌트 사용 불가");
+            return;
+        }
+
+        // Payload에서 컴포넌트 ID 추출
+        if (!message.TryGetPayload<MapComponentPayload>(out var payload))
+        {
+            GameLogger.Error("CentralMapBulletController", "MapComponentPayload 추출 실패");
+            return;
+        }
+
+        string componentID = payload.ComponentID;
+        ulong localClientId = NetworkManager.Singleton.LocalClientId;
+        int playerID = (int)localClientId;
+
+        GameLogger.Info("CentralMapBulletController",
+            $"[{componentID.ToUpper()}] Player {playerID} 컴포넌트 사용 요청");
+
+        // ✅ BrickGameMultiplayerSpawner의 ServerRpc 호출
+        var spawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        if (spawner != null)
+        {
+            spawner.RequestUseMapComponentServerRpc(playerID, componentID);
         }
         else
         {

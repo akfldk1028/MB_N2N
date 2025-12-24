@@ -914,4 +914,64 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         }
     }
     #endregion
+
+    #region MapComponent ServerRpc (BOMB, HARVEST 등)
+    /// <summary>
+    /// [ServerRpc] 맵 컴포넌트 사용 요청
+    /// 클라이언트에서 BOMB 등 컴포넌트 사용 시 호출
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestUseMapComponentServerRpc(int playerID, string componentID, ServerRpcParams rpcParams = default)
+    {
+        GameLogger.Info("BrickGameMultiplayerSpawner", $"[ServerRpc] RequestUseMapComponentServerRpc - Player {playerID}, Component: {componentID}");
+
+        // MapComponentManager에서 컴포넌트 찾아서 실행
+        if (Managers.Map?.Components != null)
+        {
+            bool success = Managers.Map.Components.Use(playerID, componentID);
+            if (success)
+            {
+                GameLogger.Success("BrickGameMultiplayerSpawner", $"Player {playerID} - {componentID} 사용 성공");
+            }
+            else
+            {
+                GameLogger.Warning("BrickGameMultiplayerSpawner", $"Player {playerID} - {componentID} 사용 실패 (쿨다운 또는 미등록)");
+            }
+        }
+        else
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", "MapComponentManager가 없습니다");
+        }
+    }
+
+    /// <summary>
+    /// [ClientRpc] 맵 컴포넌트 이펙트 동기화
+    /// 서버에서 컴포넌트 사용 후 모든 클라이언트에 이펙트 재생 요청
+    /// </summary>
+    [ClientRpc]
+    public void PlayComponentEffectClientRpc(string componentID, float x, float y, float z, int playerID)
+    {
+        GameLogger.Info("BrickGameMultiplayerSpawner", $"[ClientRpc] PlayComponentEffectClientRpc - {componentID} at ({x}, {y}, {z})");
+
+        // 컴포넌트 타입별 이펙트 재생
+        Vector3 position = new Vector3(x, y, z);
+
+        switch (componentID)
+        {
+            case "bomb":
+                var bomb = Managers.Map?.Components?.GetByID("bomb", playerID) as BombComponent;
+                bomb?.PlayEffectLocal(position);
+                break;
+
+            case "harvest":
+                var harvest = Managers.Map?.Components?.GetByID("harvest", playerID) as HarvestComponent;
+                harvest?.PlayEffectLocal(position);
+                break;
+
+            default:
+                GameLogger.Warning("BrickGameMultiplayerSpawner", $"알 수 없는 컴포넌트: {componentID}");
+                break;
+        }
+    }
+    #endregion
 }

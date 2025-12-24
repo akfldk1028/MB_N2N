@@ -29,6 +29,7 @@ namespace MB.Infrastructure.Messages
         Input_RhythmGameExit,     // Esc키 리듬게임 종료
         Input_Fire,               // Space키 발사 (BrickGame 대포)
         Input_CentralMapFire,     // Enter키 발사 (땅따먹기 대포)
+        Input_UseMapComponent,    // 맵 컴포넌트 사용 (BOMB, HARVEST 등)
 
         // ✅ BrickGame 이벤트 (멀티플레이어 동기화)
         BrickGame_ScoreChanged,      // 점수 변경 (네트워크 동기화 필수)
@@ -128,6 +129,19 @@ namespace MB.Infrastructure.Messages
         {
             FiringClientId = firingClientId;
             BulletCount = bulletCount;
+        }
+    }
+
+    /// <summary>
+    /// 맵 컴포넌트 사용 (bomb, harvest 등)
+    /// </summary>
+    public readonly struct MapComponentPayload : IActionPayload
+    {
+        public string ComponentID { get; }
+
+        public MapComponentPayload(string componentID)
+        {
+            ComponentID = componentID;
         }
     }
 

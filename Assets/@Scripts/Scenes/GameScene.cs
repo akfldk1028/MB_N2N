@@ -301,6 +301,20 @@ public class GameScene : BaseScene
 		{
 			Managers.PublishAction(MB.Infrastructure.Messages.ActionId.Input_CentralMapFire);
 		}
+
+		// ✅ B키 = BOMB 컴포넌트 사용
+		if (Input.GetKeyDown(KeyCode.B))
+		{
+			var bombPayload = new MB.Infrastructure.Messages.MapComponentPayload("bomb");
+			Managers.PublishAction(MB.Infrastructure.Messages.ActionId.Input_UseMapComponent, bombPayload);
+		}
+
+		// ✅ H키 = HARVEST 컴포넌트 사용 (자동 발동이지만 수동으로도 가능)
+		if (Input.GetKeyDown(KeyCode.H))
+		{
+			var harvestPayload = new MB.Infrastructure.Messages.MapComponentPayload("harvest");
+			Managers.PublishAction(MB.Infrastructure.Messages.ActionId.Input_UseMapComponent, harvestPayload);
+		}
 	}
 
 	/// <summary>
