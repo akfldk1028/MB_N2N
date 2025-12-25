@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using MB.Infrastructure.Messages;
 
 /// <summary>
 /// 벽돌깨기 게임 메인 매니저 (Non-MonoBehaviour)
@@ -178,7 +179,10 @@ public class BrickGameManager
         _state.Reset();
         _state.ResetRowsSpawned();
         _state.ResetScore();
-        
+
+        // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
+        Managers.Game?.Rules?.Reset();
+
         // 이벤트 발생 (UI가 구독하여 점수 업데이트)
         OnScoreChanged?.Invoke(_state.CurrentScore);
         
@@ -250,13 +254,56 @@ public class BrickGameManager
     #region Public Methods - 점수 관리
     /// <summary>
     /// 벽돌 파괴 시 점수 추가 (외부에서 호출)
+    /// ✅ 멀티플레이어: BrickGameNetworkSync가 OnScoreChanged 구독 → ActionBus 발행
+    /// ✅ 싱글플레이어: 직접 ActionBus 발행
     /// </summary>
     public void AddScore(int waveValue)
     {
         _state.AddScore(waveValue);
-        
+
+        // 이벤트 발생 (BrickGameNetworkSync가 구독 → NetworkVariable 업데이트)
+        OnScoreChanged?.Invoke(_state.CurrentScore);
+
+        // ✅ 싱글플레이어: 직접 ActionBus 발행 (BrickGameNetworkSync가 없으면)
+        if (_networkSync == null && MultiplayerUtil.IsSinglePlayer())
+        {
+            Managers.PublishAction(ActionId.BrickGame_ScoreChanged,
+                new BrickGameScorePayload(_state.CurrentScore, _state.CurrentLevel));
+            GameLogger.DevLog("BrickGameManager", $"[싱글플레이어] ActionBus 점수 발행: {_state.CurrentScore}");
+        }
+    }
+
+    /// <summary>
+    /// 점수 차감 (총알 발사 시 호출)
+    /// ✅ 점수 = 총알 개수이므로, 발사 시 점수 차감
+    /// </summary>
+    public void SubtractScore(int amount)
+    {
+        if (amount <= 0) return;
+
+        // ✅ 멀티플레이어: NetworkSync 점수 직접 차감 (핵심 수정!)
+        if (_networkSync != null && MultiplayerUtil.IsMultiplayer())
+        {
+            _networkSync.SubtractScore(amount);
+            GameLogger.Info("BrickGameManager", $"[멀티플레이어] 점수 차감 요청: -{amount}");
+            return;
+        }
+
+        // ✅ 싱글플레이어: 로컬 점수 차감
+        int currentScore = _state.CurrentScore;
+        int newScore = UnityEngine.Mathf.Max(0, currentScore - amount);
+
+        // 점수 직접 설정
+        _state.SetScore(newScore);
+
         // 이벤트 발생
         OnScoreChanged?.Invoke(_state.CurrentScore);
+
+        // ActionBus 발행
+        Managers.PublishAction(ActionId.BrickGame_ScoreChanged,
+            new BrickGameScorePayload(_state.CurrentScore, _state.CurrentLevel));
+
+        GameLogger.Info("BrickGameManager", $"[싱글플레이어] 점수 차감: {currentScore} → {newScore} (-{amount})");
     }
     #endregion
     

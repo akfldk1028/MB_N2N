@@ -56,11 +56,19 @@ public class BrickGameState
     public void AddScore(int amount)
     {
         if (amount <= 0) return;
-        
+
         CurrentScore += amount;
         GameLogger.Info("BrickGameState", $"점수 추가: +{amount}, 현재 점수: {CurrentScore}");
     }
-    
+
+    /// <summary>
+    /// 점수 직접 설정 (차감 등에 사용)
+    /// </summary>
+    public void SetScore(int newScore)
+    {
+        CurrentScore = Mathf.Max(0, newScore);
+    }
+
     /// <summary>
     /// 점수 초기화
     /// </summary>

@@ -324,6 +324,75 @@ public class CentralMapBulletController : NetworkBehaviour
     }
 
     /// <summary>
+    /// 플레이어의 점수(총알) 가져오기
+    /// ✅ 점수 = 총알 개수 규칙
+    /// ✅ 멀티플레이어: 플레이어별 BrickGameManager에서 가져오기
+    /// </summary>
+    private int GetPlayerScore(int playerId)
+    {
+        // ✅ 멀티플레이어: 플레이어별 BrickGameManager 사용!
+        if (MultiplayerUtil.IsMultiplayer())
+        {
+            var playerGame = Managers.Game?.GetPlayerGame((ulong)playerId);
+            if (playerGame != null)
+            {
+                int score = playerGame.Score;
+                GameLogger.Info("CentralMapBulletController", $"[GetPlayerScore] Player {playerId} 점수(멀티): {score}");
+                return score;
+            }
+            GameLogger.Warning("CentralMapBulletController", $"[GetPlayerScore] Player {playerId} BrickGame 없음!");
+            return 0;
+        }
+
+        // ✅ 싱글플레이어: 전역 BrickGameManager 사용
+        if (Managers.Game?.BrickGame != null)
+        {
+            int score = Managers.Game.BrickGame.Score;
+            GameLogger.Info("CentralMapBulletController", $"[GetPlayerScore] Player {playerId} 점수(싱글): {score}");
+            return score;
+        }
+
+        GameLogger.Warning("CentralMapBulletController", $"[GetPlayerScore] BrickGameManager null - Player {playerId}");
+        return 0;
+    }
+
+    /// <summary>
+    /// 플레이어의 점수 차감 (총알 발사 시)
+    /// ✅ 멀티플레이어: 플레이어별 BrickGameManager에서 차감
+    /// </summary>
+    private void SubtractPlayerScore(int playerId, int amount)
+    {
+        if (amount <= 0) return;
+
+        // ✅ 멀티플레이어: 플레이어별 BrickGameManager 사용!
+        if (MultiplayerUtil.IsMultiplayer())
+        {
+            var playerGame = Managers.Game?.GetPlayerGame((ulong)playerId);
+            if (playerGame != null)
+            {
+                playerGame.SubtractScore(amount);
+                GameLogger.Info("CentralMapBulletController", $"[SubtractPlayerScore] Player {playerId} 점수 차감(멀티): -{amount}, 남은 점수: {playerGame.Score}");
+            }
+            else
+            {
+                GameLogger.Error("CentralMapBulletController", $"[SubtractPlayerScore] Player {playerId} BrickGame 없음 - 점수 차감 실패!");
+            }
+            return;
+        }
+
+        // ✅ 싱글플레이어: 전역 BrickGameManager 사용
+        if (Managers.Game?.BrickGame != null)
+        {
+            Managers.Game.BrickGame.SubtractScore(amount);
+            GameLogger.Info("CentralMapBulletController", $"[SubtractPlayerScore] Player {playerId} 점수 차감(싱글): -{amount}, 남은 점수: {Managers.Game.BrickGame.Score}");
+        }
+        else
+        {
+            GameLogger.Error("CentralMapBulletController", $"[SubtractPlayerScore] BrickGameManager null - 점수 차감 실패!");
+        }
+    }
+
+    /// <summary>
     /// 발사 요청 처리 (Server-side)
     /// </summary>
     private void HandleFireRequest(ulong clientId, int bulletCount)
@@ -438,13 +507,17 @@ public class CentralMapBulletController : NetworkBehaviour
         // 플레이어 인덱스 결정 (clientId → playerIndex)
         int playerIndex = (int)clientId; // 0 또는 1
 
-        // ✅ SERVER에서 블록 개수 확인 (CLIENT는 정확한 값을 모를 수 있음)
-        int bulletCount = GetPlayerBlockCount(playerIndex);
+        // ✅ 점수 = 총알 개수! (블록 개수 대신 점수 사용)
+        int bulletCount = GetPlayerScore(playerIndex);
         if (bulletCount <= 0)
         {
-            GameLogger.Warning("CentralMapBulletController", $"[Server] Player {playerIndex} 블록 없음 - 발사 불가");
+            GameLogger.Warning("CentralMapBulletController", $"[Server] Player {playerIndex} 점수(총알) 없음 - 발사 불가");
             return;
         }
+
+        // ✅ 점수 차감 (발사 전에 미리 차감!)
+        SubtractPlayerScore(playerIndex, bulletCount);
+        GameLogger.Info("CentralMapBulletController", $"[Server] Player {playerIndex} 점수 차감: -{bulletCount}");
 
         // ✅ 대포 캐시가 비어있으면 갱신 (대포가 늦게 생성된 경우 대비)
         if (_playerCannons.Count == 0)

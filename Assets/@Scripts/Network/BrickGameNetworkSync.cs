@@ -231,5 +231,40 @@ public class BrickGameNetworkSync : BaseGameNetworkSync<BrickGameManager>
     /// 현재 동기화된 게임 상태 반환
     /// </summary>
     public GamePhase GetPhase() => _currentPhase;
+
+    /// <summary>
+    /// 점수 직접 설정 (총알 발사 시 차감용)
+    /// ✅ 멀티플레이어에서 점수 = 총알 규칙 적용을 위해 필수
+    /// </summary>
+    public void SetScore(int newScore)
+    {
+        _currentScore = Mathf.Max(0, newScore);
+
+        // 동기화 메시지 발행 (Server/Client 모두)
+        if (IsServer)
+        {
+            var message = new BrickGameScoreMessage(_currentScore, _currentLevel, 0);
+            _scoreChannel.Publish(message);
+        }
+
+        // 로컬 ActionBus에도 발행 (UI 업데이트용)
+        Managers.PublishAction(ActionId.BrickGame_ScoreChanged,
+            new BrickGameScorePayload(_currentScore, _currentLevel));
+
+        GameLogger.Info("BrickGameNetworkSync", $"SetScore 호출: {newScore} → {_currentScore}");
+    }
+
+    /// <summary>
+    /// 점수 차감 (총알 발사 시)
+    /// </summary>
+    public void SubtractScore(int amount)
+    {
+        if (amount <= 0) return;
+
+        int oldScore = _currentScore;
+        SetScore(_currentScore - amount);
+
+        GameLogger.Info("BrickGameNetworkSync", $"점수 차감: {oldScore} → {_currentScore} (-{amount})");
+    }
     #endregion
 }

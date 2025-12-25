@@ -156,11 +156,74 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
         // ✅ 맵 컴포넌트 등록 (BOMB, HARVEST 등)
         RegisterMapComponents();
 
+        // ✅ GameRuleManager.OnFired 이벤트 구독 (CannonBulletRule과 연결)
+        SubscribeToGameRuleEvents();
+
         // ✅ CLIENT: SERVER가 Spawn한 캐논들을 찾기 위해 지연 호출
         var netManager = Unity.Netcode.NetworkManager.Singleton;
         if (netManager != null && netManager.IsClient && !netManager.IsServer)
         {
             StartCoroutine(DelayedRefreshCannons());
+        }
+    }
+
+    /// <summary>
+    /// GameRuleManager 이벤트 구독 (CannonBulletRule.OnFired 연결)
+    /// </summary>
+    private void SubscribeToGameRuleEvents()
+    {
+        if (Managers.Game?.Rules != null)
+        {
+            Managers.Game.Rules.OnFired += HandleRuleFired;
+            Debug.Log("<color=green>[IsometricGridGenerator] GameRuleManager.OnFired 구독 완료!</color>");
+        }
+        else
+        {
+            Debug.LogWarning("[IsometricGridGenerator] GameRuleManager 없음 - OnFired 구독 실패");
+        }
+    }
+
+    /// <summary>
+    /// CannonBulletRule에서 발사 이벤트 수신 → 실제 대포 발사
+    /// </summary>
+    private void HandleRuleFired(int bulletCount)
+    {
+        if (bulletCount <= 0) return;
+
+        // 로컬 플레이어 ID
+        int localPlayerId = 0;
+        if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsClient)
+        {
+            localPlayerId = (int)Unity.Netcode.NetworkManager.Singleton.LocalClientId;
+        }
+
+        // 해당 플레이어의 대포 찾기
+        Cannon myCannon = null;
+        foreach (var cannon in _cannons)
+        {
+            if (cannon != null && cannon.playerID == localPlayerId)
+            {
+                myCannon = cannon;
+                break;
+            }
+        }
+
+        if (myCannon == null)
+        {
+            Debug.LogWarning($"[IsometricGridGenerator] HandleRuleFired - Player {localPlayerId}의 대포 없음");
+            return;
+        }
+
+        Debug.Log($"<color=yellow>[IsometricGridGenerator] CannonBulletRule → 대포 발사! {bulletCount}발</color>");
+        myCannon.Fire(bulletCount);
+    }
+
+    void OnDestroy()
+    {
+        // 이벤트 구독 해제
+        if (Managers.Game?.Rules != null)
+        {
+            Managers.Game.Rules.OnFired -= HandleRuleFired;
         }
     }
 
@@ -244,65 +307,9 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
         // ✅ MapComponentManager Tick 호출 (쿨다운, 충전 등)
         Managers.Map?.Components?.Tick(Time.deltaTime);
 
-        // ✅ 멀티플레이어에서는 CentralMapBulletController가 Enter 키 처리
-        //    (GameScene.Update → ActionBus → CentralMapBulletController → ServerRpc)
-        //    여기서 중복 처리하면 로컬 Instantiate가 발생하여 문제 발생!
-        var netManager = Unity.Netcode.NetworkManager.Singleton;
-        if (netManager != null && netManager.IsListening)
-        {
-            // 멀티플레이어 모드: CentralMapBulletController가 담당
-            return;
-        }
-
-        // 싱글플레이어만: Enter 키로 대포 발사 (테스트용)
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
-        {
-            HandleFireInput();
-        }
-    }
-
-    /// <summary>
-    /// Enter 키 입력 시 대포 발사 처리
-    /// </summary>
-    private void HandleFireInput()
-    {
-        // 멀티플레이어: 로컬 플레이어 ID 가져오기
-        int localPlayerId = 0;
-        if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsClient)
-        {
-            localPlayerId = (int)Unity.Netcode.NetworkManager.Singleton.LocalClientId;
-        }
-
-        // 해당 플레이어의 대포 찾기
-        Cannon myCannon = null;
-        foreach (var cannon in _cannons)
-        {
-            if (cannon != null && cannon.playerID == localPlayerId)
-            {
-                myCannon = cannon;
-                break;
-            }
-        }
-
-        if (myCannon == null)
-        {
-            Debug.LogWarning($"[IsometricGridGenerator] Player {localPlayerId}의 대포를 찾을 수 없습니다!");
-            return;
-        }
-
-        // 내 블록 개수 = 발사할 총알 수
-        int bulletCount = GetBlockCountByPlayer(localPlayerId);
-
-        if (bulletCount <= 0)
-        {
-            Debug.LogWarning($"[IsometricGridGenerator] Player {localPlayerId} 블록 없음 - 발사 불가");
-            return;
-        }
-
-        Debug.Log($"<color=green>[IsometricGridGenerator] Player {localPlayerId} 발사! 블록 수: {bulletCount}</color>");
-
-        // 대포 발사
-        myCannon.Fire(bulletCount);
+        // ✅ 대포 발사는 GameRuleManager.OnFired 이벤트로 처리됨
+        //    (Space키 → GameScene → ActionBus → GameRuleManager → CannonBulletRule → OnFired → HandleRuleFired)
+        //    Enter키 레거시 처리 제거됨
     }
 
     public void CreateGrid()

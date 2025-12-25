@@ -15,6 +15,12 @@ MonoBehaviour:
   m_GroupName: Prefab
   m_GUID: 83930099ecb2e0b44967f72913400935
   m_SerializeEntries:
+  - m_GUID: 35b3c7fce4987e84db6a3068be3a24be
+    m_Address: operatorBrick
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - PreLoad
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3b81280f44a9ca54587a7c1d83de800e
     m_Address: brick
     m_ReadOnly: 0

@@ -3,8 +3,8 @@ using MB.Infrastructure.Messages;
 
 /// <summary>
 /// 대포 총알 규칙
-/// - 점수 = 총알 개수
-/// - 스페이스바 = 모든 총알 발사
+/// - 점수 = 총알 개수 (직접 동일!)
+/// - 스페이스바 = 1발 발사, 점수 -1
 /// - 발사된 총알은 상대방 게임에 영향
 /// </summary>
 public class CannonBulletRule : BaseGameRule
@@ -16,80 +16,95 @@ public class CannonBulletRule : BaseGameRule
 
     #region Settings
     /// <summary>
-    /// 한 번에 발사하는 총알 수 (0 = 전부)
+    /// 한 번에 발사하는 총알 수
     /// </summary>
-    public int BulletsPerFire { get; set; } = 0;
+    public int BulletsPerFire { get; set; } = 1;
 
     /// <summary>
     /// 발사 쿨다운 (초)
     /// </summary>
-    public float FireCooldown { get; set; } = 0.5f;
+    public float FireCooldown { get; set; } = 0.1f;
     #endregion
 
     #region State
     private float _lastFireTime = 0f;
-    private IDisposable _scoreSubscription;
     #endregion
 
     #region 라이프사이클
     public override void Initialize()
     {
+        if (_initialized)
+        {
+            GameLogger.Warning("CannonBulletRule", "이미 초기화됨 - 스킵");
+            return;
+        }
+
         base.Initialize();
+        _lastFireTime = 0f;
 
-        // ActionBus 구독: 점수 변경 이벤트
-        _scoreSubscription = Managers.Subscribe(
-            ActionId.BrickGame_ScoreChanged,
-            OnScoreChangedMessage
-        );
-
-        GameLogger.Success("CannonBulletRule", "초기화 완료 - 점수→총알 규칙 활성화");
+        GameLogger.Success("CannonBulletRule", "초기화 완료 - 점수=총알 규칙 활성화");
     }
 
     public override void Cleanup()
     {
-        _scoreSubscription?.Dispose();
-        _scoreSubscription = null;
-
         base.Cleanup();
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _lastFireTime = 0f;
     }
     #endregion
 
-    #region 점수 변경 처리
+    #region 점수 = 총알 (직접 사용)
     /// <summary>
-    /// ActionBus에서 점수 변경 메시지 수신
+    /// 현재 총알 개수 = 현재 점수
     /// </summary>
-    private void OnScoreChangedMessage(ActionMessage message)
+    public override int GetResourceCount()
     {
-        // 멀티플레이어 페이로드 처리
-        if (message.TryGetPayload<MultiplayerScorePayload>(out var multiPayload))
-        {
-            // 내 점수 변경만 처리
-            ulong localClientId = MultiplayerUtil.GetLocalClientId();
+        return GetCurrentScore();
+    }
 
-            if (multiPayload.ChangedClientId == localClientId)
-            {
-                int myNewScore = localClientId == 0
-                    ? multiPayload.Player0Score
-                    : multiPayload.Player1Score;
+    /// <summary>
+    /// 발사 가능 여부 = 점수 > 0
+    /// </summary>
+    public override bool CanFire()
+    {
+        return GetCurrentScore() > 0;
+    }
 
-                // 현재 자원 개수와 비교하여 증가분만 추가
-                int gained = myNewScore - _resourceCount;
-                if (gained > 0)
-                {
-                    AddResource(gained);
-                }
-            }
-        }
+    /// <summary>
+    /// 현재 점수 가져오기 (싱글/멀티 분기)
+    /// </summary>
+    private int GetCurrentScore()
+    {
+        if (Managers.Game?.BrickGame == null) return 0;
+        return Managers.Game.BrickGame.Score;
+    }
+
+    /// <summary>
+    /// 점수 차감 (발사 시)
+    /// </summary>
+    private bool SubtractScore(int amount)
+    {
+        if (amount <= 0) return false;
+
+        int currentScore = GetCurrentScore();
+        if (currentScore < amount) return false;
+
+        // BrickGameManager에서 점수 차감
+        Managers.Game?.BrickGame?.SubtractScore(amount);
+
+        GameLogger.Info("CannonBulletRule", $"점수 차감: -{amount}, 남은 점수: {GetCurrentScore()}");
+        return true;
     }
 
     public override void OnScoreChanged(int oldScore, int newScore)
     {
-        // 직접 호출 시 (싱글플레이어 등)
-        int gained = newScore - oldScore;
-        if (gained > 0)
-        {
-            AddResource(gained);
-        }
+        // 점수 = 총알이므로 별도 처리 불필요
+        // UI 업데이트용 이벤트만 발생
+        NotifyResourceChanged();
     }
     #endregion
 
@@ -113,9 +128,11 @@ public class CannonBulletRule : BaseGameRule
     /// </summary>
     private void TryFire()
     {
-        if (!CanFire())
+        int currentScore = GetCurrentScore();
+
+        if (currentScore <= 0)
         {
-            GameLogger.DevLog("CannonBulletRule", "발사 불가: 총알 없음");
+            GameLogger.DevLog("CannonBulletRule", "발사 불가: 점수(총알) 없음");
             return;
         }
 
@@ -123,20 +140,20 @@ public class CannonBulletRule : BaseGameRule
         float currentTime = UnityEngine.Time.time;
         if (currentTime - _lastFireTime < FireCooldown)
         {
-            GameLogger.DevLog("CannonBulletRule", "발사 불가: 쿨다운 중");
-            return;
+            return; // 쿨다운 중 - 로그 스팸 방지
         }
 
         // 발사할 총알 수 결정
         int toFire = BulletsPerFire > 0
-            ? UnityEngine.Mathf.Min(BulletsPerFire, _resourceCount)
-            : _resourceCount;
+            ? UnityEngine.Mathf.Min(BulletsPerFire, currentScore)
+            : currentScore;
 
-        // 총알 소비 및 발사
-        if (ConsumeResource(toFire))
+        // ✅ 점수 차감 (총알 소비)
+        if (SubtractScore(toFire))
         {
             _lastFireTime = currentTime;
             NotifyFired(toFire);
+            NotifyResourceChanged();
 
             // ActionBus에 발사 이벤트 발행
             Managers.PublishAction(
@@ -144,7 +161,7 @@ public class CannonBulletRule : BaseGameRule
                 new BulletFiredPayload(MultiplayerUtil.GetLocalClientId(), toFire)
             );
 
-            GameLogger.Info("CannonBulletRule", $"총알 발사: {toFire}발, 남은: {_resourceCount}");
+            GameLogger.Info("CannonBulletRule", $"🔫 발사: {toFire}발, 남은 점수: {GetCurrentScore()}");
         }
     }
 

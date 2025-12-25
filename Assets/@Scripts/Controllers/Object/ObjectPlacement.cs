@@ -9,7 +9,8 @@ public enum SpawnableObjectType
 {
     Brick,
     BonusBall,
-    Star
+    Star,
+    OperatorBrick  // ✅ 연산자 블록 (+, ×)
 }
 
 /// <summary>
@@ -35,6 +36,10 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
     [SerializeField] private GameObject brickPrefab;
     [SerializeField] private GameObject bonusBallPrefab;
     [SerializeField] private GameObject starPrefab;
+    [SerializeField] private GameObject operatorBrickPrefab;  // ✅ 연산자 블록 프리팹
+
+    [Header("연산자 블록 설정")]
+    [SerializeField] [Range(0f, 0.3f)] private float operatorBrickSpawnRate = 0.1f;  // 10% 확률
     
     [Header("레이아웃 설정")]
     [SerializeField] private int maxBricksPerRow = 7;
@@ -182,6 +187,20 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
             }
         }
 
+        // ✅ OperatorBrick 프리팹 자동 로드
+        if (operatorBrickPrefab == null)
+        {
+            operatorBrickPrefab = Managers.Resource.Load<GameObject>("operatorBrick");
+            if (operatorBrickPrefab != null)
+            {
+                GameLogger.Info("ObjectPlacement", "operatorBrick 프리팹 자동 로드 완료 (Addressables)");
+            }
+            else
+            {
+                GameLogger.Warning("ObjectPlacement", "operatorBrick 프리팹을 찾을 수 없습니다 - 일반 brick 사용");
+            }
+        }
+
         GameLogger.Success("ObjectPlacement", "모든 참조 자동 초기화 완료!");
     }
     
@@ -196,9 +215,10 @@ public class ObjectPlacement : MonoBehaviour, IBrickPlacer
     {
         switch (type)
         {
-            case SpawnableObjectType.Brick:     return brickPrefab;
-            case SpawnableObjectType.BonusBall: return bonusBallPrefab;
-            case SpawnableObjectType.Star:      return starPrefab;
+            case SpawnableObjectType.Brick:         return brickPrefab;
+            case SpawnableObjectType.BonusBall:     return bonusBallPrefab;
+            case SpawnableObjectType.Star:          return starPrefab;
+            case SpawnableObjectType.OperatorBrick: return operatorBrickPrefab ?? brickPrefab;  // ✅ 없으면 일반 brick
             default:
                 Debug.LogError($"알 수 없는 오브젝트 타입: {type}");
                 return brickPrefab;
@@ -312,13 +332,19 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
             GameObject prefabToSpawn = GetPrefabForType(objectType);
             if (prefabToSpawn != null)
             {
-                SpawnAndInitializeObject(prefabToSpawn, spawnInfo);
+                SpawnAndInitializeObject(prefabToSpawn, spawnInfo, objectType);
             }
         }
     }
     
     private SpawnableObjectType DetermineRandomObjectType()
     {
+        // ✅ 연산자 블록 확률 체크 (operatorBrickSpawnRate 설정)
+        if (operatorBrickPrefab != null && _random.NextDouble() < operatorBrickSpawnRate)
+        {
+            return SpawnableObjectType.OperatorBrick;
+        }
+
         int randomType = _random.Next(0, 20);
 
         if (randomType == 0) return SpawnableObjectType.BonusBall;
@@ -495,7 +521,7 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
         }
     }
     
-    private void SpawnAndInitializeObject(GameObject prefabToSpawn, PotentialSpawnInfo spawnInfo)
+    private void SpawnAndInitializeObject(GameObject prefabToSpawn, PotentialSpawnInfo spawnInfo, SpawnableObjectType objectType = SpawnableObjectType.Brick)
     {
         Vector3 spawnPosition = spawnInfo.SpawnPosition;
         float targetY = spawnInfo.TargetY;
@@ -509,6 +535,35 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
 
         GameObject newObject = Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity);
         newObject.transform.localScale = objectScale;
+
+        // ✅ OperatorBrick 설정 (랜덤 연산자 타입 및 값)
+        if (objectType == SpawnableObjectType.OperatorBrick)
+        {
+            var operatorBrick = newObject.GetComponent<Unity.Assets.Scripts.Objects.OperatorBrick>();
+            if (operatorBrick != null)
+            {
+                // 랜덤 연산자 타입 (Add 또는 Multiply)
+                var opType = _random.Next(0, 2) == 0
+                    ? Unity.Assets.Scripts.Objects.OperatorBrick.OperatorType.Add
+                    : Unity.Assets.Scripts.Objects.OperatorBrick.OperatorType.Multiply;
+
+                // 랜덤 값 (타입에 따라 다른 범위)
+                int opValue;
+                if (opType == Unity.Assets.Scripts.Objects.OperatorBrick.OperatorType.Add)
+                {
+                    // Add: +1 ~ +10
+                    opValue = _random.Next(1, 11);
+                }
+                else
+                {
+                    // Multiply: ×2 ~ ×5
+                    opValue = _random.Next(2, 6);
+                }
+
+                operatorBrick.SetOperator(opType, opValue);
+                GameLogger.Info("ObjectPlacement", $"[OperatorBrick] {(opType == Unity.Assets.Scripts.Objects.OperatorBrick.OperatorType.Add ? "+" : "×")}{opValue} 생성");
+            }
+        }
 
         // ✅ NetworkObject Spawn 처리 (멀티플레이어 동기화)
         var networkObject = newObject.GetComponent<NetworkObject>();
