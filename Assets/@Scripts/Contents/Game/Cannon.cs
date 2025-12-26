@@ -15,8 +15,8 @@ public class Cannon : BaseObject
     [Header("발사 설정")]
     public Transform firePoint; // 총알이 발사될 위치
     public GameObject bulletPrefab; // 총알 프리팹
-    public float bulletSpeed = 20f; // 총알 속도
-    public float fireInterval = 0.1f; // 연속 발사 간격
+    public float bulletSpeed = 30f; // ✅ 빠른 총알 속도!
+    public float fireInterval = 0.015f; // ✅ 초당 ~66발 연사! (다다다다다닥)
 
     [Header("플레이어 정보")]
     public int playerID = -1; // 캐논 소유자 플레이어 ID (-1은 중립)

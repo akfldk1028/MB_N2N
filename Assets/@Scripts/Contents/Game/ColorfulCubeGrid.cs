@@ -35,8 +35,8 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
 
     [Header("Bullet Settings")] // 총알 설정 추가
     public GameObject bulletPrefab; // 총알 프리팹 (Cannon에서 사용)
-    public float bulletSpeed = 15f; // 총알 속도
-    public float bulletFireInterval = 0.1f; // 연사 간격
+    public float bulletSpeed = 30f; // ✅ 빠른 총알 속도!
+    public float bulletFireInterval = 0.015f; // ✅ 초당 ~66발 연사! (다다다다다닥)
 
     // 생성된 캐논 리스트
     private List<Cannon> _cannons = new List<Cannon>();
@@ -96,12 +96,15 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
         // CannonBullet 스크립트 추가
         bulletPrefab.AddComponent<CannonBullet>();
 
-        // ✅ Rigidbody (물리 이동용) - kinematic으로 설정 (MovePosition 사용)
+        // ✅ Rigidbody (물리 이동 + 충돌 감지용) - Dynamic으로 설정!
         var rb = bulletPrefab.AddComponent<Rigidbody>();
         rb.useGravity = false;
-        rb.isKinematic = true;  // ✅ kinematic으로 변경 (MovePosition 사용)
-        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;  // kinematic용
+        rb.isKinematic = false;  // ✅ Dynamic Rigidbody (충돌 감지 정확!)
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;  // 고속 충돌 감지
         rb.interpolation = RigidbodyInterpolation.Interpolate;
+        rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionY;
+        rb.linearDamping = 0f;
+        rb.angularDamping = 0f;
 
         // Collider (충돌 감지)
         var collider = bulletPrefab.AddComponent<SphereCollider>();
@@ -370,8 +373,9 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
                     collider.center = Vector3.zero;
                     collider.size = Vector3.one;
 
-                    // 트리거로 설정하여 물리적 충돌 없이 이벤트만 발생하도록 함
-                    collider.isTrigger = true;
+                    // ✅ isTrigger = FALSE! (총알이 isTrigger=true이므로 블록은 false여야 OnTriggerEnter 호출됨)
+                    // Unity 규칙: 두 Collider가 모두 isTrigger=true면 OnTriggerEnter가 호출되지 않음!
+                    collider.isTrigger = false;
                 }
                 
                 Renderer renderer = cube.GetComponent<Renderer>();

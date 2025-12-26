@@ -42,13 +42,15 @@ namespace Unity.Assets.Scripts.Objects
         // OnTriggerEnter2D 구현 (Star는 트리거로 설정)
         protected override void OnTriggerEnter2D(Collider2D collision)
         {
-            Debug.Log($"<color=cyan>[BonusBall] OnCollisionEnter2D: {collision.gameObject.name}, Tag: {collision.gameObject.tag}</color>");
-            
+            // ✅ Server에서만 충돌 처리!
+            if (!IsServer && IsSpawned) return;
+
+            Debug.Log($"<color=cyan>[Star] OnTriggerEnter2D: {collision.gameObject.name}, Tag: {collision.gameObject.tag}</color>");
+
             if (isCollected) return;
-            
-            // 공과 충돌 감지
-        // 공과 충돌 감지 - 여기서 태그 또는 컴포넌트로 확인
-            if (collision.gameObject.CompareTag("Ball") || 
+
+            // 공과 충돌 감지 - 여기서 태그 또는 컴포넌트로 확인
+            if (collision.gameObject.CompareTag("Ball") ||
                 collision.gameObject.GetComponent<PhysicsBall>() != null)
             {
                 HandleTriggerCollision(collision.gameObject);
@@ -132,7 +134,20 @@ namespace Unity.Assets.Scripts.Objects
         private System.Collections.IEnumerator DestroyAfterDelay(float delay)
         {
             yield return new WaitForSeconds(delay);
-            Destroy(gameObject);
+
+            // ✅ NetworkObject는 Server에서만 Despawn!
+            if (IsServer || !IsSpawned)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn();
+                }
+                else
+                {
+                    Destroy(gameObject);
+                }
+            }
         }
         
         // 글로벌 공 공격력 증가

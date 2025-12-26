@@ -68,6 +68,7 @@ public class CannonBullet : NetworkBehaviour
     // ✅ Rigidbody 캐시 (MovePosition 사용을 위해)
     private Rigidbody _rigidbody;
     private int _moveLogCount = 0;  // 로그 카운터
+    private float _fixedY;  // ✅ Y값 고정 (바닥에 묻히지 않도록)
 
     private void Awake()
     {
@@ -76,11 +77,17 @@ public class CannonBullet : NetworkBehaviour
         if (_rigidbody != null)
         {
             _rigidbody.useGravity = false;
-            _rigidbody.isKinematic = true;
-            // ✅ 충돌 감지 모드: Continuous로 설정하여 고속 이동 시에도 감지
-            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            // ✅ 비운동학적(Dynamic)으로 설정해야 충돌 감지가 제대로 됨!
+            _rigidbody.isKinematic = false;
+            // ✅ 충돌 감지 모드: ContinuousDynamic으로 설정하여 고속 이동 시에도 감지
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             // ✅ interpolation으로 부드러운 이동
             _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            // ✅ 물리 충돌 시 밀리지 않도록 constraints 설정
+            _rigidbody.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionY;
+            // ✅ drag 설정으로 안정적인 이동
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.angularDamping = 0f;
         }
 
         // 콜라이더 설정
@@ -116,7 +123,9 @@ public class CannonBullet : NetworkBehaviour
         if (!IsServer && _networkSpawnPosition.Value != Vector3.zero)
         {
             transform.position = _networkSpawnPosition.Value;
-            Debug.Log($"<color=green>[CannonBullet] CLIENT 스폰 위치 적용: {_networkSpawnPosition.Value}</color>");
+            // ✅ CLIENT에서도 Y값 고정 설정
+            _fixedY = _networkSpawnPosition.Value.y;
+            Debug.Log($"<color=green>[CannonBullet] CLIENT 스폰 위치 적용: {_networkSpawnPosition.Value}, fixedY={_fixedY}</color>");
         }
 
         Debug.Log($"<color=cyan>[CannonBullet] OnNetworkSpawn 완료 - 로컬 isActive={isActive}, dir={direction}</color>");
@@ -184,7 +193,9 @@ public class CannonBullet : NetworkBehaviour
         if (!IsServer && newValue != Vector3.zero)
         {
             transform.position = newValue;
-            Debug.Log($"<color=green>[CannonBullet] 위치 동기화: {newValue}</color>");
+            // ✅ CLIENT에서도 Y값 고정 설정
+            _fixedY = newValue.y;
+            Debug.Log($"<color=green>[CannonBullet] 위치 동기화: {newValue}, fixedY={_fixedY}</color>");
         }
     }
     #endregion
@@ -192,27 +203,50 @@ public class CannonBullet : NetworkBehaviour
     /// <summary>
     /// 총알 발사 (SERVER에서 호출)
     /// </summary>
-    public void Fire(Vector3 dir, float spd = 0)
+    /// <param name="dir">발사 방향</param>
+    /// <param name="spd">속도 (0이면 기본값 사용)</param>
+    /// <param name="fixedYValue">Y값 고정 (-1이면 현재 위치 사용)</param>
+    public void Fire(Vector3 dir, float spd = 0, float fixedYValue = -1f)
     {
-        Debug.Log($"<color=magenta>[CannonBullet] Fire() 시작 - IsServer={IsServer}, IsSpawned={IsSpawned}, dir={dir}, spd={spd}</color>");
+        Debug.Log($"<color=magenta>[CannonBullet] Fire() 시작 - IsServer={IsServer}, pos={transform.position}, dir={dir}, spd={spd}, fixedY={fixedYValue}</color>");
 
-        // ✅ SERVER에서만 NetworkVariable 설정
-        if (IsServer)
+        // ✅ Y값 고정 저장 (명시적으로 전달받거나 현재 위치 사용)
+        if (fixedYValue >= 0)
         {
-            _networkDirection.Value = dir.normalized;
-            if (spd > 0) _networkSpeed.Value = spd;
-            _networkIsActive.Value = true;
-            // ✅ 스폰 위치 동기화 (CLIENT가 올바른 위치에서 시작하도록)
-            _networkSpawnPosition.Value = transform.position;
-            Debug.Log($"<color=green>[CannonBullet] NetworkVariable 설정 완료 - dir={_networkDirection.Value}, speed={_networkSpeed.Value}, pos={_networkSpawnPosition.Value}, isActive={_networkIsActive.Value}</color>");
+            _fixedY = fixedYValue;
         }
         else
         {
-            Debug.LogWarning($"<color=red>[CannonBullet] Fire()가 IsServer=false에서 호출됨! NetworkVariable 설정 스킵</color>");
+            _fixedY = transform.position.y;
         }
 
-        // 로컬 값도 즉시 설정 (SERVER 측 응답성)
-        direction = dir.normalized;
+        // ✅ Y=0은 블록과 동일한 높이로 정상값 (보정 제거)
+
+        // ✅ XZ 평면에서만 이동하도록 방향 벡터 조정
+        Vector3 normalizedDir = new Vector3(dir.x, 0, dir.z).normalized;
+
+        // ✅ NetworkVariable 설정 (Spawn 전에도 설정 가능 - Spawn 시 Client로 동기화됨)
+        // 주의: IsServer는 Spawn 전에 false일 수 있으므로, NetworkManager 직접 확인
+        bool isServerContext = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+
+        if (isServerContext)
+        {
+            _networkDirection.Value = normalizedDir;
+            if (spd > 0) _networkSpeed.Value = spd;
+            _networkIsActive.Value = true;
+            // ✅ 스폰 위치 동기화 (CLIENT가 올바른 위치에서 시작하도록)
+            Vector3 spawnPos = transform.position;
+            spawnPos.y = _fixedY;  // Y값 보정
+            _networkSpawnPosition.Value = spawnPos;
+            Debug.Log($"<color=green>[CannonBullet] NetworkVariable 설정 완료 - dir={_networkDirection.Value}, speed={_networkSpeed.Value}, pos={_networkSpawnPosition.Value}, fixedY={_fixedY}</color>");
+        }
+        else
+        {
+            Debug.LogWarning($"<color=red>[CannonBullet] Fire()가 Server가 아닌 곳에서 호출됨!</color>");
+        }
+
+        // ✅ 로컬 값도 즉시 설정 (SERVER에서 바로 이동 시작)
+        direction = normalizedDir;
         if (spd > 0) speed = spd;
         isActive = true;
     }
@@ -224,8 +258,9 @@ public class CannonBullet : NetworkBehaviour
     {
         ownerCannon = cannon;
 
-        // ✅ SERVER에서만 NetworkVariable 설정
-        if (IsServer)
+        // ✅ NetworkVariable 설정 (Spawn 전에도 설정 가능)
+        bool isServerContext = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+        if (isServerContext)
         {
             _networkOwnerPlayerID.Value = playerID;
             _networkOwnerColor.Value = color;
@@ -235,7 +270,7 @@ public class CannonBullet : NetworkBehaviour
         ownerColor = color;
         ownerPlayerID = playerID;
 
-        Debug.Log($"<color=yellow>[CannonBullet] SetOwner - ID={playerID}, IsServer={IsServer}</color>");
+        Debug.Log($"<color=yellow>[CannonBullet] SetOwner - ID={playerID}, isServerContext={isServerContext}</color>");
 
         ApplyColor(color);
     }
@@ -257,48 +292,60 @@ public class CannonBullet : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// ✅ Update()에서 velocity 설정 → Rigidbody가 이동하여 충돌 감지 정확!
+    /// </summary>
     private void Update()
     {
-        // ✅ lifetime 체크만 Update에서 수행 (SERVER에서만 Despawn)
+        // ✅ lifetime 체크 (SERVER에서만 Despawn)
         if (IsServer && !isDestroying && Time.time - spawnTime > lifetime)
         {
             DestroyBullet();
+            return;
         }
-    }
 
-    /// <summary>
-    /// 물리 기반 이동 (FixedUpdate에서 실행해야 충돌 감지 정상 작동)
-    /// </summary>
-    private void FixedUpdate()
-    {
-        // ✅ NetworkVariable 값 직접 사용 (로컬 캐시 타이밍 문제 해결)
-        bool currentIsActive = _networkIsActive.Value;
-        Vector3 currentDirection = _networkDirection.Value;
-        float currentSpeed = _networkSpeed.Value;
+        // ✅ NetworkVariable 값 또는 로컬 값 사용 (둘 중 하나라도 활성화면 이동)
+        bool netActive = _networkIsActive.Value;
+        Vector3 netDir = _networkDirection.Value;
+        float netSpeed = _networkSpeed.Value;
 
-        if (!currentIsActive || isDestroying) return;
+        // ✅ 로컬 값도 체크 (NetworkVariable 동기화 전에도 이동하도록)
+        bool useLocal = isActive && direction.sqrMagnitude > 0.01f;
+        bool useNetwork = netActive && netDir.sqrMagnitude > 0.01f;
 
-        // ✅ direction이 zero면 이동하지 않음 (아직 Fire 안 됨)
-        if (currentDirection.sqrMagnitude < 0.01f) return;
+        if (isDestroying) return;
 
-        // ✅ Rigidbody.MovePosition 사용 (물리 엔진이 충돌 감지)
+        // ✅ 둘 다 비활성이면 정지
+        if (!useLocal && !useNetwork)
+        {
+            if (_rigidbody != null) _rigidbody.linearVelocity = Vector3.zero;
+            return;
+        }
+
+        // ✅ 사용할 방향과 속도 결정 (로컬 우선, 없으면 네트워크)
+        Vector3 moveDir = useLocal ? direction : netDir;
+        float moveSpeed = useLocal ? speed : netSpeed;
+
+        // ✅ direction이 zero면 정지
+        if (moveDir.sqrMagnitude < 0.01f)
+        {
+            if (_rigidbody != null) _rigidbody.linearVelocity = Vector3.zero;
+            return;
+        }
+
+        // ✅ Rigidbody velocity 설정 → 물리 엔진이 이동 + 충돌 감지!
         if (_rigidbody != null)
         {
-            Vector3 newPosition = _rigidbody.position + currentDirection * currentSpeed * Time.fixedDeltaTime;
-            _rigidbody.MovePosition(newPosition);
-
-            // 처음 5프레임만 로그 (과도한 로그 방지)
-            if (_moveLogCount < 5)
-            {
-                Debug.Log($"<color=cyan>[CannonBullet] FixedUpdate 이동: pos={_rigidbody.position}, dir={currentDirection}, speed={currentSpeed}</color>");
-                _moveLogCount++;
-            }
+            // XZ 평면에서만 이동 (Y는 FreezePositionY로 고정됨)
+            Vector3 velocity = new Vector3(moveDir.x * moveSpeed, 0, moveDir.z * moveSpeed);
+            _rigidbody.linearVelocity = velocity;
         }
-        else
+
+        // 처음 3프레임만 로그
+        if (_moveLogCount < 3)
         {
-            // Fallback: Rigidbody 없으면 직접 이동 (충돌 감지 안될 수 있음)
-            Debug.LogWarning("[CannonBullet] ❌ Rigidbody 없음! transform.position 직접 이동");
-            transform.position += currentDirection * currentSpeed * Time.fixedDeltaTime;
+            Debug.Log($"<color=cyan>[CannonBullet] Update 이동: pos={transform.position}, dir={moveDir}, speed={moveSpeed}, velocity={_rigidbody?.linearVelocity}</color>");
+            _moveLogCount++;
         }
     }
 
@@ -328,12 +375,10 @@ public class CannonBullet : NetworkBehaviour
                   $"hasParent={hitObject.transform.parent != null}, " +
                   $"parentName={(hitObject.transform.parent != null ? hitObject.transform.parent.name : "none")}</color>");
 
-        // 다른 총알과 충돌 무시
+        // 다른 총알과 충돌 무시 (파괴하지 않음 - 통과!)
         if (hitObject.GetComponent<CannonBullet>() != null)
         {
-            Debug.Log($"<color=gray>[CannonBullet] 다른 총알과 충돌 - 무시</color>");
-            DestroyBullet();
-            return;
+            return; // ✅ 로그도 제거 (스팸 방지)
         }
 
         // 벽과 충돌 시 파괴
@@ -458,10 +503,56 @@ public class CannonBullet : NetworkBehaviour
             Instantiate(hitEffect, transform.position, Quaternion.identity);
         }
 
-        // ✅ NetworkObject Despawn (CLIENT에도 자동 동기화됨)
+        // ✅ 풀링 사용: Despawn(false) + 풀로 반환
         if (IsSpawned)
         {
-            NetworkObject.Despawn();
+            if (NetworkBulletPool.Instance != null)
+            {
+                // ✅ 풀로 반환 (Despawn + ReturnToPool)
+                NetworkBulletPool.Instance.DespawnAndReturn(NetworkObject);
+            }
+            else
+            {
+                // ✅ 폴백: 풀이 없으면 파괴
+                NetworkObject.Despawn(true);
+            }
         }
+    }
+
+    /// <summary>
+    /// 풀에서 재사용 시 상태 리셋
+    /// </summary>
+    public void ResetForReuse()
+    {
+        isDestroying = false;
+        isActive = false;
+        direction = Vector3.zero;
+        ownerPlayerID = -1;
+        ownerCannon = null;
+        ownerColor = Color.white;
+        spawnTime = Time.time;
+        _moveLogCount = 0;
+        _fixedY = 0f;  // Y값 고정 리셋
+
+        // ✅ Rigidbody 속도 리셋
+        if (_rigidbody != null)
+        {
+            _rigidbody.linearVelocity = Vector3.zero;
+            _rigidbody.angularVelocity = Vector3.zero;
+        }
+
+        // ✅ SERVER 컨텍스트에서만 NetworkVariable 리셋
+        bool isServerContext = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+        if (isServerContext)
+        {
+            _networkIsActive.Value = false;
+            _networkDirection.Value = Vector3.zero;
+            _networkSpeed.Value = 20f;
+            _networkOwnerPlayerID.Value = -1;
+            _networkOwnerColor.Value = Color.white;
+            _networkSpawnPosition.Value = Vector3.zero;
+        }
+
+        Debug.Log($"<color=green>[CannonBullet] 상태 리셋 완료 (풀 재사용 준비)</color>");
     }
 }

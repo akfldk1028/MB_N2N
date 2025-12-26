@@ -1,8 +1,6 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using Unity.Services.Matchmaker.Models;
 
 namespace Unity.Assets.Scripts.Objects
 {
@@ -54,14 +52,17 @@ namespace Unity.Assets.Scripts.Objects
         // OnCollisionEnter2D 직접 구현 (PhysicsObject의 OnCollisionEnter2D보다 먼저 실행됨)
         protected override void OnTriggerEnter2D(Collider2D collision)
         {
+            // ✅ Server에서만 충돌 처리!
+            if (!IsServer && IsSpawned) return;
+
             // 디버그용 로그 - 모든 충돌 출력
-            Debug.Log($"<color=cyan>[BonusBall] OnCollisionEnter2D: {collision.gameObject.name}, Tag: {collision.gameObject.tag}</color>");
-            
+            Debug.Log($"<color=cyan>[BonusBall] OnTriggerEnter2D: {collision.gameObject.name}, Tag: {collision.gameObject.tag}</color>");
+
             // isCollected 체크가 필요함
             if (isCollected) return;
-            
+
             // 공과 충돌 감지 - 여기서 태그 또는 컴포넌트로 확인
-            if (collision.gameObject.CompareTag("Ball") || 
+            if (collision.gameObject.CompareTag("Ball") ||
                 collision.gameObject.GetComponent<PhysicsBall>() != null)
             {
                 HandleTriggerCollision(collision.gameObject);
@@ -73,9 +74,17 @@ namespace Unity.Assets.Scripts.Objects
         {
             // 이미 처리됐으면 중복 처리 방지
             if (isCollected) return;
-            
+
             isCollected = true;
-            
+
+            // ✅ 충돌한 공의 플랭크 참조 사용 (멀티플레이어 호환)
+            var collidingBall = ballObject.GetComponent<PhysicsBall>();
+            if (collidingBall != null && collidingBall.Plank != null)
+            {
+                plank = collidingBall.Plank;
+                Debug.Log($"<color=cyan>[BonusBall] 충돌한 공의 플랭크 사용: {plank.name}</color>");
+            }
+
             Debug.Log($"<color=green>[{gameObject.name}] BonusBall 충돌 처리 시작! 공 {ballsToAdd}개 추가 발사 예정</color>");
             
             // 효과음 재생
@@ -103,7 +112,20 @@ namespace Unity.Assets.Scripts.Objects
         private IEnumerator DestroyAfterDelay(float delay)
         {
             yield return new WaitForSeconds(delay);
-            Destroy(gameObject);
+
+            // ✅ NetworkObject는 Server에서만 Despawn!
+            if (IsServer || !IsSpawned)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn();
+                }
+                else
+                {
+                    Destroy(gameObject);
+                }
+            }
         }
         
         // 새로운 공 생성 및 발사 메서드
@@ -185,58 +207,72 @@ namespace Unity.Assets.Scripts.Objects
             }
         }
         
-        // 실제 공 생성 및 발사 로직 (코드 중복 제거)
+        // 실제 공 생성 및 발사 로직
         private void CreateAndLaunchBall(GameObject ballTemplate, bool isServer)
         {
-            // 1. 위치 계산 (공통 유틸리티 사용)
+            if (ballTemplate == null)
+            {
+                Debug.LogError("[BonusBall] ballTemplate이 null입니다!");
+                return;
+            }
+
+            // 1. 스폰 위치 계산 (보너스볼 위치 또는 플랭크 위)
             Vector3 spawnPosition;
-            
-            // 템플릿 공의 콜라이더 가져오기
-            var templateBallCollider = ballTemplate.GetComponent<Collider2D>();
-            
-            // 공통 유틸리티를 사용하여 위치 계산
-            // spawnPosition = BallPositionUtility.GetLaunchPosition(plank, templateBallCollider, ballTemplate.transform);
-            
+            if (plank != null)
+            {
+                // 플랭크 위에서 발사
+                spawnPosition = plank.transform.position + Vector3.up * 0.5f;
+            }
+            else
+            {
+                // 보너스볼 위치에서 발사
+                spawnPosition = transform.position;
+            }
+
             // 2. 공 생성
-            // GameObject newBallObj = Instantiate(ballTemplate, spawnPosition, Quaternion.identity);
-            //
-            // // 태그 설정 확인
-            // if (newBallObj.tag == "Untagged" || string.IsNullOrEmpty(newBallObj.tag))
-            // {
-            //     newBallObj.tag = "Ball";
-            // }
-            //
-            // // 3. 네트워크 스폰 (서버인 경우)
-            // if (isServer && newBallObj.GetComponent<NetworkObject>() != null)
-            // {
-            //     newBallObj.GetComponent<NetworkObject>().Spawn();
-            // }
-            
+            GameObject newBallObj = Instantiate(ballTemplate, spawnPosition, Quaternion.identity);
+
+            // 태그 설정
+            if (string.IsNullOrEmpty(newBallObj.tag) || newBallObj.tag == "Untagged")
+            {
+                newBallObj.tag = "Ball";
+            }
+
+            // 3. 네트워크 스폰 (서버인 경우)
+            if (isServer)
+            {
+                var netObj = newBallObj.GetComponent<NetworkObject>();
+                if (netObj != null)
+                {
+                    netObj.Spawn();
+                    Debug.Log($"<color=green>[BonusBall] 네트워크 공 스폰 완료: {newBallObj.name}</color>");
+                }
+            }
+
             // 4. PhysicsBall 컴포넌트 초기화 및 발사
-            // PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
-            // if (newBall != null)
-            // {
-            //     newBall.Init(); // 초기화
-            //     
-            //     // 중요: 기존 공의 파워업 상태를 새 공에 복사
-            //     PhysicsBall templateBall = ballTemplate.GetComponent<PhysicsBall>();
-            //     if (templateBall != null)
-            //     {
-            //         newBall.ColorBallByPower();
-            //     }
-            //         
-            //     // 공통 유틸리티를 사용하여 무작위 방향 생성
-            //     // Vector2 launchDir = BallPositionUtility.GetRandomizedLaunchDirection(baseDirection);
-            //     
-            //     // 발사
-            //     // newBall.LaunchBall(launchDir);
-            //     
-            //     Debug.Log($"<color=yellow>[{gameObject.name}] 보너스 공이 발사되었습니다. 방향: {launchDir}, 공격력: {newBall.AttackPower}</color>");
-            // }
-            // else
-            // {
-            //     Debug.LogError($"생성된 공 오브젝트에 PhysicsBall 컴포넌트가 없습니다: {newBallObj.name}");
-            // }
+            PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
+            if (newBall != null)
+            {
+                // 플랭크 참조 설정
+                if (plank != null)
+                {
+                    newBall.SetPlankReference(plank);
+                }
+
+                // 무작위 방향 생성 (위쪽 + 좌우 랜덤)
+                float randomAngle = UnityEngine.Random.Range(-45f, 45f);
+                Vector2 launchDir = Quaternion.Euler(0, 0, randomAngle) * baseDirection;
+                launchDir.Normalize();
+
+                // 발사
+                newBall.LaunchBall(launchDir);
+
+                Debug.Log($"<color=yellow>[BonusBall] 보너스 공 발사! 방향: {launchDir}</color>");
+            }
+            else
+            {
+                Debug.LogError($"[BonusBall] PhysicsBall 컴포넌트가 없습니다: {newBallObj.name}");
+            }
         }
     }
 }

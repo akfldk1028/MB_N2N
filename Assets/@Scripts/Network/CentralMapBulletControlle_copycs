@@ -22,8 +22,16 @@ public class CentralMapBulletController : NetworkBehaviour
     #region Settings
     [Header("총알 설정")]
     [SerializeField] private GameObject bulletPrefab;
-    [SerializeField] private float bulletSpeed = 30f;           // ✅ 빠른 속도!
-    [SerializeField] private int bulletsPerFrame = 1;           // ✅ 1발씩 발사 (기관총 효과: 다다다다닥!)
+    [SerializeField] private float bulletSpeed = 25f;
+
+    [Header("스프레드 설정 (부채꼴 퍼짐)")]
+    [SerializeField] private float spreadAngle = 90f;           // 좌우 ±45도
+    [SerializeField] private float positionSpread = 0.8f;       // 발사 위치 랜덤 범위
+
+    [Header("총알 발사 설정 (CannonBullet만 사용 - 충돌 감지 가능)")]
+    [SerializeField] private int maxBulletsPerBurst = 3000;         // ✅ 한 번에 발사 가능한 최대 총알 수
+    [SerializeField] private int bulletsPerFrame = 20;              // ✅ 프레임당 발사할 총알 수 (순차 발사로 시원하게 퍼짐!)
+    [SerializeField] private float bulletInterval = 0f;             // ✅ 배치 간 간격 (0이면 매 프레임)
     #endregion
 
     #region NetworkVariables (게임 오버 동기화)
@@ -551,6 +559,9 @@ public class CentralMapBulletController : NetworkBehaviour
 
     /// <summary>
     /// 총알 발사 코루틴 (Server에서 실행)
+    /// ✅ 모든 총알을 CannonBullet(NetworkObject)로 발사
+    /// ✅ Update()에서 이동하므로 즉시 시원하게 퍼져나감!
+    /// ✅ 순차 발사로 대포에서 뭉치지 않고 퍼짐
     /// </summary>
     private IEnumerator FireBulletsCoroutine(ulong clientId, Cannon cannon, int bulletCount)
     {
@@ -563,89 +574,121 @@ public class CentralMapBulletController : NetworkBehaviour
             yield break;
         }
 
-        for (int i = 0; i < bulletCount; i++)
+        if (cannon == null || cannon.turretBarrel == null)
         {
-            if (_isGameOver.Value) break;
+            GameLogger.Error("CentralMapBulletController", "❌ cannon 또는 turretBarrel이 NULL!");
+            _isFiring[clientId] = false;
+            yield break;
+        }
 
-            // 발사 위치 (null 체크 추가)
-            if (cannon == null || cannon.turretBarrel == null)
+        Transform firePoint = cannon.firePoint != null ? cannon.firePoint : cannon.turretBarrel;
+        Vector3 baseDirection = cannon.turretBarrel.forward;
+        baseDirection.y = 0;
+        baseDirection = baseDirection.normalized;
+
+        // ✅ 총알 Y 높이 (블록 위로 떠야 함)
+        float blockHeight = IsometricGridGenerator.Instance != null
+            ? IsometricGridGenerator.Instance.gridHeight + 0.5f  // 블록 높이 + 여유분
+            : 0.5f;
+
+        int playerID = cannon.playerID;
+        Color playerColor = cannon.playerColor;
+        Vector3 firePosition = firePoint.position;
+        firePosition.y = blockHeight;
+
+        // ✅ 발사할 총알 수 (최대 제한)
+        int totalBullets = Mathf.Min(bulletCount, maxBulletsPerBurst);
+
+        GameLogger.Info("CentralMapBulletController",
+            $"[Server] Player {clientId} 총알 {totalBullets}발 발사 시작! (순차 발사로 시원하게 퍼짐)");
+
+        // ═══════════════════════════════════════════════════════════════
+        // 모든 총알을 CannonBullet(NetworkObject)로 순차 발사
+        // Update()에서 즉시 이동 → 시원하게 퍼져나감!
+        // ═══════════════════════════════════════════════════════════════
+        int bulletsFired = 0;
+
+        while (bulletsFired < totalBullets && !_isGameOver.Value)
+        {
+            // ✅ 프레임당 발사할 수량 (순차 발사로 뭉치지 않음)
+            int batchSize = Mathf.Min(bulletsPerFrame, totalBullets - bulletsFired);
+
+            for (int i = 0; i < batchSize; i++)
             {
-                GameLogger.Error("CentralMapBulletController", "❌ cannon 또는 turretBarrel이 NULL!");
-                yield break;
-            }
+                // 스프레드 각도 계산 (부채꼴 퍼짐)
+                float angleOffset = UnityEngine.Random.Range(-spreadAngle / 2f, spreadAngle / 2f);
+                Vector3 spreadDirection = Quaternion.Euler(0, angleOffset, 0) * baseDirection;
 
-            Transform firePoint = cannon.firePoint != null ? cannon.firePoint : cannon.turretBarrel;
-            Vector3 spawnPos = firePoint.position;
+                // 발사 위치에 랜덤 오프셋
+                Vector3 spawnPos = firePosition;
+                spawnPos.x += UnityEngine.Random.Range(-positionSpread, positionSpread);
+                spawnPos.z += UnityEngine.Random.Range(-positionSpread, positionSpread);
+                spawnPos.y = blockHeight;
 
-            // ✅ 총알 Y 높이: 블록과 동일한 높이 (Y=0)에서 발사해야 충돌 감지됨!
-            spawnPos.y = 0f;
+                // 속도 변화 (±10%)
+                float speedVariation = bulletSpeed * UnityEngine.Random.Range(0.9f, 1.1f);
 
-            // ✅ 스폰 위치 랜덤 오프셋 (총알 겹침 방지)
-            spawnPos.x += UnityEngine.Random.Range(-0.3f, 0.3f);
-            spawnPos.z += UnityEngine.Random.Range(-0.3f, 0.3f);
+                // ✅ 풀링 사용
+                NetworkObject netObj = null;
+                GameObject bullet = null;
+                bool isFromPool = false;
 
-            Vector3 direction = cannon.turretBarrel.forward;
-            // ✅ 방향도 수평으로 (Y=0)
-            direction.y = 0;
-            direction = direction.normalized;
-
-            // ✅ 방향 랜덤 퍼짐 (샷건 효과 - 부와아악!)
-            float spreadAngle = UnityEngine.Random.Range(-15f, 15f);
-            direction = Quaternion.Euler(0, spreadAngle, 0) * direction;
-
-            // ✅ 총알 생성 (풀링 우선, 폴백으로 Instantiate)
-            NetworkObject netObj = null;
-            GameObject bullet = null;
-            bool fromPool = false;
-
-            // ✅ 풀링 사용 (NetworkBulletPool 있으면)
-            if (NetworkBulletPool.Instance != null)
-            {
-                netObj = NetworkBulletPool.Instance.GetNetworkObject(spawnPos, Quaternion.identity);
-                if (netObj != null)
+                if (NetworkBulletPool.Instance != null)
                 {
-                    bullet = netObj.gameObject;
-                    fromPool = true;
+                    netObj = NetworkBulletPool.Instance.GetNetworkObject(spawnPos, Quaternion.identity);
+                    if (netObj != null)
+                    {
+                        bullet = netObj.gameObject;
+                        isFromPool = true;
+                    }
                 }
+
+                if (bullet == null)
+                {
+                    bullet = Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
+                    netObj = bullet.GetComponent<NetworkObject>();
+                }
+
+                CannonBullet bulletScript = bullet.GetComponent<CannonBullet>();
+                if (bulletScript != null)
+                {
+                    // ✅ 순서 중요! ResetForReuse → 위치 설정 → Fire → Spawn
+                    // Spawn() 전에 모든 값을 설정해야 OnNetworkSpawn()에서 올바른 값을 읽음!
+                    if (isFromPool)
+                    {
+                        bulletScript.ResetForReuse();
+                    }
+
+                    // ✅ 위치 명시적으로 설정
+                    bullet.transform.position = spawnPos;
+
+                    // ✅ 소유자 및 발사 설정 (NetworkVariable 값 설정)
+                    bulletScript.SetOwner(cannon, playerColor, playerID);
+                    bulletScript.Fire(spreadDirection, speedVariation, blockHeight);
+                }
+
+                // ✅ 모든 설정 완료 후 Spawn! (Client가 올바른 초기 값을 받음)
+                if (netObj != null && !netObj.IsSpawned)
+                {
+                    netObj.Spawn();
+                }
+
+                bulletsFired++;
             }
 
-            // ✅ 폴백: 풀에서 가져오기 실패 시
-            if (netObj == null)
+            // ✅ 프레임 분산 → 순차 발사로 시원하게 퍼짐!
+            yield return null;
+
+            // 배치 간 간격 (필요시)
+            if (bulletInterval > 0)
             {
-                GameObject prefabToUse = NetworkBulletPool.Instance != null
-                    ? NetworkBulletPool.Instance.BulletPrefab
-                    : bulletPrefab;
-
-                if (prefabToUse == null) continue;
-
-                bullet = Instantiate(prefabToUse, spawnPos, Quaternion.identity);
-                netObj = bullet.GetComponent<NetworkObject>();
-            }
-
-            // ✅ NetworkObject Spawn
-            if (netObj == null) continue;
-            netObj.Spawn();
-
-            // ✅ Spawn 후에 상태 리셋 및 SetOwner/Fire 호출
-            CannonBullet bulletScript = bullet.GetComponent<CannonBullet>();
-            if (bulletScript != null)
-            {
-                if (fromPool) bulletScript.ResetForReuse();
-                bulletScript.SetOwner(cannon, cannon.playerColor, cannon.playerID);
-                bulletScript.Fire(direction, bulletSpeed);
-            }
-
-            // ✅ 프레임당 N발 발사 후 다음 프레임 대기 (기관총 효과: 다다다다닥!)
-            // - 매 프레임 소량씩 Spawn → 네트워크 부하 분산 → 렉 없음!
-            if ((i + 1) % bulletsPerFrame == 0)
-            {
-                yield return null; // 다음 프레임까지 대기
+                yield return new WaitForSeconds(bulletInterval);
             }
         }
 
         _isFiring[clientId] = false;
-        float totalFrames = bulletCount / (float)bulletsPerFrame;
-        GameLogger.Success("CentralMapBulletController", $"[Server] Player {clientId} 발사 완료! 🔫 {bulletCount}발 (~{totalFrames:F0}프레임)");
+        GameLogger.Info("CentralMapBulletController",
+            $"[Server] Player {clientId} 발사 완료! (총 {bulletsFired}발 - 모두 CannonBullet)");
     }
     #endregion
 

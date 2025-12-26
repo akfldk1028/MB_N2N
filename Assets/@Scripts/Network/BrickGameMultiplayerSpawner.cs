@@ -913,6 +913,86 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             GameLogger.Warning("BrickGameMultiplayerSpawner", $"[ClientRpc] 블록 {blockName}을 찾을 수 없습니다");
         }
     }
+
+    /// <summary>
+    /// [ClientRpc] 시각적 총알 생성 (NetworkObject 없음 - 네트워크 부하 최소화!)
+    /// 모든 클라이언트에서 동일한 랜덤 시드로 로컬 총알 생성
+    /// </summary>
+    [ClientRpc]
+    public void SpawnVisualBulletsClientRpc(
+        Vector3 firePosition,
+        Vector3 baseDirection,
+        int bulletCount,
+        float bulletSpeed,
+        float spreadAngle,
+        float positionSpread,
+        float colorR, float colorG, float colorB,
+        int randomSeed)
+    {
+        // 클라이언트에서 시각적 총알 생성 (코루틴으로 분산)
+        StartCoroutine(SpawnVisualBulletsCoroutine(
+            firePosition, baseDirection, bulletCount, bulletSpeed,
+            spreadAngle, positionSpread,
+            new Color(colorR, colorG, colorB), randomSeed));
+    }
+
+    /// <summary>
+    /// 시각적 총알 생성 코루틴 (로컬 전용)
+    /// </summary>
+    private System.Collections.IEnumerator SpawnVisualBulletsCoroutine(
+        Vector3 firePosition,
+        Vector3 baseDirection,
+        int bulletCount,
+        float bulletSpeed,
+        float spreadAngle,
+        float positionSpread,
+        Color bulletColor,
+        int randomSeed)
+    {
+        // 동일한 랜덤 시드로 모든 클라이언트에서 같은 패턴 생성
+        UnityEngine.Random.InitState(randomSeed);
+
+        int spawned = 0;
+        int bulletsPerBatch = 30;  // 한 프레임당 생성할 총알 수
+
+        GameLogger.Info("BrickGameMultiplayerSpawner",
+            $"[VisualBullets] 시각적 총알 {bulletCount}개 생성 시작 (seed={randomSeed})");
+
+        while (spawned < bulletCount)
+        {
+            int batchSize = Mathf.Min(bulletsPerBatch, bulletCount - spawned);
+
+            for (int i = 0; i < batchSize; i++)
+            {
+                // 스프레드 각도 계산
+                float angleOffset = UnityEngine.Random.Range(-spreadAngle / 2f, spreadAngle / 2f);
+                Vector3 spreadDirection = Quaternion.Euler(0, angleOffset, 0) * baseDirection;
+
+                // 발사 위치에 랜덤 오프셋
+                Vector3 spawnPos = firePosition;
+                spawnPos.x += UnityEngine.Random.Range(-positionSpread, positionSpread);
+                spawnPos.z += UnityEngine.Random.Range(-positionSpread, positionSpread);
+
+                // 속도 변화
+                float speedVariation = bulletSpeed * UnityEngine.Random.Range(0.9f, 1.1f);
+
+                // 시각적 총알 생성 (VisualBullet 풀 사용)
+                VisualBullet bullet = VisualBullet.CreateSimple(spawnPos, Quaternion.identity, 0.25f);
+                if (bullet != null)
+                {
+                    bullet.Fire(spreadDirection, speedVariation, bulletColor);
+                }
+
+                spawned++;
+            }
+
+            // 프레임 분산 (30발마다 한 프레임 쉬기)
+            yield return null;
+        }
+
+        GameLogger.Info("BrickGameMultiplayerSpawner",
+            $"[VisualBullets] 시각적 총알 {spawned}개 생성 완료!");
+    }
     #endregion
 
     #region MapComponent ServerRpc (BOMB, HARVEST 등)

@@ -68,6 +68,11 @@ namespace Unity.Assets.Scripts.Objects
         // 공격력 접근자 (인스턴스 기반)
         public int AttackPower => _power;
 
+        /// <summary>
+        /// 플랭크 참조 접근자 (BonusBall 등에서 사용)
+        /// </summary>
+        public PhysicsPlank Plank => plank;
+
         // 네트워크 변수
         private NetworkVariable<int> _syncedBallCount = new NetworkVariable<int>(1);
         private NetworkVariable<EBallState> _syncedState = new NetworkVariable<EBallState>(EBallState.None); // 상태 동기화 (여기서 정의)
@@ -420,7 +425,16 @@ namespace Unity.Assets.Scripts.Objects
                 else
                 {
                     // 마지막 공이 아니면 이 공만 파괴
-                    Destroy(gameObject);
+                    // ✅ NetworkObject는 Despawn() 먼저 호출해야 함! (클라이언트 동기화)
+                    var netObj = GetComponent<NetworkObject>();
+                    if (netObj != null && netObj.IsSpawned)
+                    {
+                        netObj.Despawn(); // 네트워크 정리 후 자동 Destroy
+                    }
+                    else
+                    {
+                        Destroy(gameObject); // 로컬 전용 (싱글플레이어)
+                    }
                 }
             }
         }

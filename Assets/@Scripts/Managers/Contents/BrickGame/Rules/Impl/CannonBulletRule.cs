@@ -21,9 +21,9 @@ public class CannonBulletRule : BaseGameRule
     public int BulletsPerFire { get; set; } = 1;
 
     /// <summary>
-    /// 발사 쿨다운 (초)
+    /// 발사 쿨다운 (초) - 연사 속도!
     /// </summary>
-    public float FireCooldown { get; set; } = 0.1f;
+    public float FireCooldown { get; set; } = 0.015f; // ✅ 초당 ~66발!
     #endregion
 
     #region State

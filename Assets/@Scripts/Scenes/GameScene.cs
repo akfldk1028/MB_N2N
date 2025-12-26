@@ -109,8 +109,107 @@ public class GameScene : BaseScene
 			GameLogger.Warning("GameScene", "BrickGameMultiplayerSpawner를 찾을 수 없어 BulletSpawner 초기화 스킵");
 		}
 
+		// ✅ NetworkBulletPool 초기화 (풀링 시스템)
+		InitializeNetworkBulletPool();
+
 		// ✅ 중앙 맵(땅따먹기) 총알 컨트롤러 초기화
 		InitializeCentralMapBulletController();
+	}
+
+	/// <summary>
+	/// NetworkBulletPool 동적 생성 (총알 풀링 시스템)
+	/// </summary>
+	private void InitializeNetworkBulletPool()
+	{
+		// 이미 존재하면 스킵
+		if (NetworkBulletPool.Instance != null)
+		{
+			GameLogger.Info("GameScene", "NetworkBulletPool 이미 존재함");
+			return;
+		}
+
+		// Host/Server만 생성 (Client는 자동 동기화됨)
+		var netManager = Unity.Netcode.NetworkManager.Singleton;
+		if (netManager == null || !netManager.IsServer)
+		{
+			GameLogger.Info("GameScene", "NetworkBulletPool: Client는 Server에서 Spawn된 것을 받음");
+			return;
+		}
+
+		// Bullet 프리팹 로드
+		GameObject bulletPrefab = LoadBulletPrefab();
+		if (bulletPrefab == null)
+		{
+			GameLogger.Error("GameScene", "NetworkBulletPool용 Bullet 프리팹 로드 실패!");
+			return;
+		}
+
+		// NetworkBulletPool 동적 생성
+		var poolObj = new GameObject("@NetworkBulletPool");
+		var networkObj = poolObj.AddComponent<Unity.Netcode.NetworkObject>();
+		var bulletPool = poolObj.AddComponent<NetworkBulletPool>();
+
+		// bulletPrefab 설정
+		bulletPool.SetBulletPrefab(bulletPrefab);
+
+		// Spawn (Client에 동기화됨)
+		networkObj.Spawn();
+
+		GameLogger.Success("GameScene", "NetworkBulletPool 동적 생성 및 스폰 완료!");
+	}
+
+	/// <summary>
+	/// Bullet 프리팹 로드 (Addressables 또는 Resources)
+	/// </summary>
+	private GameObject LoadBulletPrefab()
+	{
+		GameObject loadedPrefab = null;
+
+		// 1. Addressables에서 로드 시도
+		string[] addressPaths = new string[]
+		{
+			"bullet",
+			"Bullet",
+			"GameScene/Model/Bullet",
+			"GameScene/Model/Bullet.prefab"
+		};
+
+		foreach (var path in addressPaths)
+		{
+			loadedPrefab = Managers.Resource.Load<GameObject>(path);
+			if (loadedPrefab != null)
+			{
+				GameLogger.Info("GameScene", $"Bullet 프리팹 로드 성공 (Addressable: {path})");
+				break;
+			}
+		}
+
+		// 2. Resources.Load 폴백
+		if (loadedPrefab == null)
+		{
+			loadedPrefab = Resources.Load<GameObject>("GameScene/Model/Bullet");
+			if (loadedPrefab != null)
+			{
+				GameLogger.Info("GameScene", "Bullet 프리팹 로드 성공 (Resources.Load)");
+			}
+		}
+
+		// 3. NetworkObject 확인
+		if (loadedPrefab != null)
+		{
+			var netObj = loadedPrefab.GetComponent<Unity.Netcode.NetworkObject>();
+			if (netObj == null)
+			{
+				GameLogger.Error("GameScene", "Bullet 프리팹에 NetworkObject가 없습니다!");
+				return null;
+			}
+		}
+		else
+		{
+			GameLogger.Error("GameScene", "Bullet 프리팹을 찾을 수 없습니다!");
+		}
+
+		return loadedPrefab;
 	}
 
 	/// <summary>

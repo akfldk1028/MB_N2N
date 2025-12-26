@@ -190,7 +190,7 @@ namespace Unity.Assets.Scripts.Objects
                 AddScoreToPlayer(originalWave);
 
                 HandleBrickDestruction();
-                Destroy(gameObject);
+                DestroyBrickSafely();
             }
         }
         
@@ -243,7 +243,7 @@ namespace Unity.Assets.Scripts.Objects
                 // 점수 추가 (원래 wave 값 기준)
                 AddScoreToPlayer(originalWave);
                 HandleBrickDestruction();
-                Destroy(gameObject);
+                DestroyBrickSafely();
             }
         }
         #endregion
@@ -256,13 +256,30 @@ namespace Unity.Assets.Scripts.Objects
             // 업적 및 점수 추적
             int bricksDestroyed = PlayerPrefs.GetInt("numberOfBricksDestroyed", 0) + 1;
             PlayerPrefs.SetInt("numberOfBricksDestroyed", bricksDestroyed);
-            
+
             // 업적 확인 (필요한 경우)
             // CheckAndUnlockAchievement(bricksDestroyed, 100, "destroy100bricks", "destroy 100 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 1000, "destroy1000bricks", "destroy 1000 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 10000, "destroy10000bricks", "destroy 10000 bricks");
         }
-        
+
+        /// <summary>
+        /// 벽돌 안전하게 파괴 (NetworkObject 지원)
+        /// ✅ NetworkObject는 Despawn() 먼저 호출해야 클라이언트 동기화 오류 방지
+        /// </summary>
+        private void DestroyBrickSafely()
+        {
+            var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null && netObj.IsSpawned)
+            {
+                netObj.Despawn(); // 네트워크 정리 후 자동 Destroy
+            }
+            else
+            {
+                Destroy(gameObject); // 로컬 전용 (싱글플레이어)
+            }
+        }
+
         /// <summary>
         /// 업적 해금 확인 및 처리
         /// </summary>
