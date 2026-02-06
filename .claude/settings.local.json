@@ -22,7 +22,16 @@
       "mcp__memory-service__store_memory",
       "Bash(C:Python313python.exe -m pip show mcp-memory-service)",
       "mcp__memory-service__retrieve_memory",
-      "mcp__memory-service__recall_memory"
+      "mcp__memory-service__recall_memory",
+      "Bash(mkdir:*)",
+      "Bash(del \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\\\\Assets\\\\@Scripts\\\\Contents\\\\Game\\\\Grid\\\\IsometricGridGenerator.cs\")",
+      "Bash(copy \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\\\\Assets\\\\@Scripts\\\\Contents\\\\Game\\\\ColorfulCubeGrid.cs.backup\" \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\\\\Assets\\\\@Scripts\\\\Contents\\\\Game\\\\ColorfulCubeGrid.cs\")",
+      "Bash(git -C \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\" diff --stat HEAD)",
+      "Bash(git -C \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\" diff \"Assets/@Scripts/Controllers/Object/ObjectPlacement.cs\")",
+      "Bash(git -C \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\" diff \"Assets/@Scripts/Managers/Contents/BrickGame/Rules/Impl/CannonBulletRule.cs\")",
+      "WebFetch(domain:docs-multiplayer.unity3d.com)",
+      "Bash(git -C \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\" status --short)",
+      "Bash(del \"D:\\\\Data\\\\MB_N2N\\\\MB_N2N\\\\Assets\\\\@Scripts\\\\Contents\\\\BrickGame\\\\WinConditionHandler.cs\")"
     ],
     "deny": [],
     "ask": []

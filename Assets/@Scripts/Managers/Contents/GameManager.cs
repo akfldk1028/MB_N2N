@@ -37,9 +37,39 @@ public class GameManager
 	private GameRuleManager _rules = new GameRuleManager();
 	public GameRuleManager Rules => _rules;
 
+	// ✅ 승리 조건 매니저 (게임 전역 - 대포 파괴 시 승패 결정)
+	private WinConditionManager _winCondition = new WinConditionManager();
+	public WinConditionManager WinCondition => _winCondition;
+
 	public GameManager()
 	{
-		Debug.Log("<color=yellow>[GameManager]</color> 생성됨 (GameRuleManager 포함)");
+		Debug.Log("<color=yellow>[GameManager]</color> 생성됨 (GameRuleManager, WinConditionManager 포함)");
+	}
+
+	/// <summary>
+	/// 승리 조건 매니저 초기화 (게임 시작 시 한번만 호출)
+	/// </summary>
+	public void InitializeWinCondition()
+	{
+		_winCondition.Initialize();
+		GameLogger.Success("GameManager", "WinConditionManager 초기화 완료!");
+	}
+
+	/// <summary>
+	/// 승리 조건 매니저 정리 (씬 전환 시)
+	/// </summary>
+	public void CleanupWinCondition()
+	{
+		_winCondition.Cleanup();
+		GameLogger.Info("GameManager", "WinConditionManager 정리 완료!");
+	}
+
+	/// <summary>
+	/// 승리 조건 리셋 (게임 재시작 시)
+	/// </summary>
+	public void ResetWinCondition()
+	{
+		_winCondition.Reset();
 	}
 
 	/// <summary>

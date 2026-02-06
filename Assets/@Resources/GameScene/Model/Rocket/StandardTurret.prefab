@@ -161,6 +161,8 @@ GameObject:
   m_Component:
   - component: {fileID: 485008}
   - component: {fileID: 7917216562611209350}
+  - component: {fileID: 4137813414419206099}
+  - component: {fileID: 7538787582297074053}
   m_Layer: 0
   m_Name: StandardTurret
   m_TagString: Untagged
@@ -210,6 +212,50 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &4137813414419206099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174700}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24bf46ab62ca0bb4c9b89a76f83f4345, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turretBarrel: {fileID: 454316}
+  sweepSpeed: 55.3
+  sweepAngle: 180
+  barrelTurnSpeed: 15
+  firePoint: {fileID: 482280}
+  bulletPrefab: {fileID: 0}
+  bulletSpeed: 30
+  fireInterval: 0.015
+  playerID: -1
+  playerColor: {r: 1, g: 1, b: 1, a: 1}
+  maxHealth: 100
+--- !u!65 &7538787582297074053
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174700}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 2, y: 3, z: 2}
+  m_Center: {x: 0, y: 1, z: 0}
 --- !u!1 &187282
 GameObject:
   m_ObjectHideFlags: 0

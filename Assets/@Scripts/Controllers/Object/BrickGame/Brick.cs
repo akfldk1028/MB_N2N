@@ -266,13 +266,20 @@ namespace Unity.Assets.Scripts.Objects
         /// <summary>
         /// 벽돌 안전하게 파괴 (NetworkObject 지원)
         /// ✅ NetworkObject는 Despawn() 먼저 호출해야 클라이언트 동기화 오류 방지
+        /// ✅ SERVER에서만 Despawn 가능!
         /// </summary>
         private void DestroyBrickSafely()
         {
             var netObj = GetComponent<Unity.Netcode.NetworkObject>();
             if (netObj != null && netObj.IsSpawned)
             {
-                netObj.Despawn(); // 네트워크 정리 후 자동 Destroy
+                // ✅ SERVER에서만 Despawn 가능!
+                if (Unity.Netcode.NetworkManager.Singleton != null &&
+                    Unity.Netcode.NetworkManager.Singleton.IsServer)
+                {
+                    netObj.Despawn(); // 네트워크 정리 후 자동 Destroy
+                }
+                // CLIENT에서는 아무것도 안 함 - SERVER가 Despawn하면 자동으로 동기화됨
             }
             else
             {

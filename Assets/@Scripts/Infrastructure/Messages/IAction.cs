@@ -39,7 +39,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_BrickDestroyed,    // 벽돌 파괴됨
         BrickGame_TerritoryChanged,  // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
         BrickGame_BulletFired,       // 총알 발사됨 (GameRule에서 발행)
-        BrickGame_GameOver           // 게임 오버 (대포 파괴됨)
+        BrickGame_GameOver,          // 게임 오버 (대포 파괴됨)
+        BrickGame_GameEnded          // 게임 종료 (승자/패자 결정됨)
     }
 
     public interface IActionPayload { }

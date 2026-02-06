@@ -41,6 +41,12 @@ public class Cannon : BaseObject
     private Quaternion centerRotation = Quaternion.identity; // 그리드 중심을 향한 초기 회전
     private bool _isFiring = false; // 발사 중 여부
 
+    /// <summary>
+    /// 발사 방향 (네트워크 동기화용 - sweeping과 무관하게 그리드 중심 방향)
+    /// Server/Client에서 동일한 방향을 보장
+    /// </summary>
+    public Vector3 FireDirection => centerRotation * Vector3.forward;
+
     void Awake()
     {
         if (turretBarrel == null)
@@ -48,7 +54,7 @@ public class Cannon : BaseObject
             Debug.LogError("Turret Barrel이 할당되지 않았습니다!", this);
             enabled = false;
         }
-        
+
         // --- 발사 위치 설정 ---
         if (firePoint == null)
         {
@@ -57,6 +63,21 @@ public class Cannon : BaseObject
             Debug.LogWarning("FirePoint가 할당되지 않아 " + firePoint.name + "의 위치를 사용합니다.", this);
         }
         // ----------------------
+
+        // ✅ Collider 설정 (총알 충돌 감지용)
+        BoxCollider boxCol = GetComponent<BoxCollider>();
+        if (boxCol == null)
+        {
+            boxCol = gameObject.AddComponent<BoxCollider>();
+            Debug.Log($"<color=cyan>[Cannon] {name} - BoxCollider 자동 추가</color>");
+        }
+
+        // ✅ BoxCollider 크기/위치 강제 설정 (프리팹 값 덮어쓰기)
+        boxCol.size = new Vector3(2f, 3f, 2f); // 대포 크기에 맞춤
+        // ✅ center.Y=1.0으로 설정 → 하단이 Y=-0.5가 되어 Y=0 총알과 확실히 충돌!
+        boxCol.center = new Vector3(0, 1.0f, 0);
+        boxCol.isTrigger = false; // 총알이 trigger이므로 false여도 OnTriggerEnter 호출됨
+        Debug.Log($"<color=cyan>[Cannon] {name} - BoxCollider 설정 완료 (center.Y=1.0, Y범위: -0.5~2.5)</color>");
     }
 
     void Start()
@@ -71,6 +92,21 @@ public class Cannon : BaseObject
         // 체력 초기화
         _currentHealth = maxHealth;
         _isDestroyed = false;
+
+        // ✅ 디버그: Layer 및 Collider 상태 출력
+        Collider[] allColliders = GetComponentsInChildren<Collider>();
+        Debug.Log($"<color=yellow>[Cannon] {name} 디버그 정보:</color>\n" +
+                  $"  - Layer: {gameObject.layer} ({LayerMask.LayerToName(gameObject.layer)})\n" +
+                  $"  - Position: {transform.position}\n" +
+                  $"  - Collider 개수: {allColliders.Length}\n" +
+                  $"  - playerID: {playerID}");
+
+        foreach (var col in allColliders)
+        {
+            Debug.Log($"<color=cyan>[Cannon] Collider: {col.gameObject.name}, " +
+                      $"Type={col.GetType().Name}, isTrigger={col.isTrigger}, " +
+                      $"Layer={col.gameObject.layer} ({LayerMask.LayerToName(col.gameObject.layer)})</color>");
+        }
 
         // 초기화 시도 (IsometricGridGenerator가 없어도 작동하도록)
         TryInitialize();

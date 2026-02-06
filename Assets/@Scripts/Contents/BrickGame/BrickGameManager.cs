@@ -70,22 +70,23 @@ public class BrickGameManager
     
     #region Sub-Managers
     // ✅ InputManager 제거: 전역 Managers.Input 사용
+    // ✅ WinConditionManager 제거: GameManager 레벨로 이동 (Managers.Game.WinCondition)
     private PlankManager _plankManager;
     private BallManager _ballManager;
     private BrickManager _brickManager;
-    
+
     /// <summary>
     /// 패들(Plank) 관리 매니저 접근자
     /// Managers.Game.BrickGame.Plank 형태로 사용
     /// </summary>
     public PlankManager Plank => _plankManager;
-    
+
     /// <summary>
     /// 공(Ball) 관리 매니저 접근자
     /// Managers.Game.BrickGame.Ball 형태로 사용
     /// </summary>
     public BallManager Ball => _ballManager;
-    
+
     /// <summary>
     /// 벽돌(Brick) 관리 매니저 접근자
     /// Managers.Game.BrickGame.Brick 형태로 사용
@@ -108,14 +109,15 @@ public class BrickGameManager
     {
         _state = new BrickGameState();
         // ✅ InputManager 제거: 전역 Managers.Input 사용
+        // ✅ WinConditionManager 제거: GameManager 레벨로 이동
         _plankManager = new PlankManager();
         _ballManager = new BallManager();
         _brickManager = new BrickManager();
-        
+
         // Sub-Manager 이벤트 구독
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
         _brickManager.OnAllBricksDestroyed += HandleAllBricksDestroyed;
-        
+
         GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨");
     }
     #endregion
@@ -143,6 +145,7 @@ public class BrickGameManager
 
         // Sub-Managers 초기화
         // ✅ InputManager 제거: 전역 Managers.Input이 ActionBus를 통해 입력 발행
+        // ✅ WinConditionManager 제거: GameManager 레벨에서 초기화 (Managers.Game.WinCondition)
         _plankManager.Initialize(plank, mainCamera);
         _ballManager.Initialize();
         _brickManager.Initialize();

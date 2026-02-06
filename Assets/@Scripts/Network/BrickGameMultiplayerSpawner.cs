@@ -312,6 +312,16 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
         // ✅ HOST/CLIENT 모두: CentralMapBulletController 추가 (ActionBus 구독 + ServerRpc 호출용)
         // 타이밍 문제 해결: GameScene.Start()보다 OnNetworkSpawn()이 더 확실함
         InitializeCentralMapBulletController();
+
+        // ✅ Server: WinConditionManager 초기화 및 이벤트 구독 (대포 파괴 시 승리 조건 동기화)
+        if (IsServer)
+        {
+            // 1. GameManager.WinCondition 초기화 (Cannon.OnCannonDestroyed 구독)
+            Managers.Game?.InitializeWinCondition();
+
+            // 2. BrickGameMultiplayerSpawner가 WinCondition.OnGameEnded 구독 (ClientRpc 동기화용)
+            SubscribeWinConditionEvents();
+        }
     }
 
     /// <summary>
@@ -339,6 +349,81 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
             $"[{(IsServer ? "HOST" : "CLIENT")}] CentralMapBulletController 추가 및 초기화 완료");
     }
 
+    #region WinCondition Network Sync
+    // ✅ WinConditionManager가 GameManager 레벨로 이동됨 (게임 전역에서 하나)
+    // → 더 이상 플레이어별 핸들러 불필요
+    private bool _winConditionSubscribed = false;
+
+    /// <summary>
+    /// [Server] GameManager.WinCondition 이벤트 구독 (한번만)
+    /// </summary>
+    private void SubscribeWinConditionEvents()
+    {
+        if (_winConditionSubscribed) return;
+
+        var winCondition = Managers.Game?.WinCondition;
+        if (winCondition == null)
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", "[Server] WinConditionManager가 null!");
+            return;
+        }
+
+        winCondition.OnGameEnded += HandleGameEnded;
+        _winConditionSubscribed = true;
+
+        GameLogger.Success("BrickGameMultiplayerSpawner", "[Server] WinCondition 이벤트 구독 완료 (GameManager 레벨)");
+    }
+
+    /// <summary>
+    /// [Server] GameManager.WinCondition 이벤트 구독 해제
+    /// </summary>
+    private void UnsubscribeWinConditionEvents()
+    {
+        if (!_winConditionSubscribed) return;
+
+        var winCondition = Managers.Game?.WinCondition;
+        if (winCondition != null)
+        {
+            winCondition.OnGameEnded -= HandleGameEnded;
+        }
+        _winConditionSubscribed = false;
+
+        GameLogger.Info("BrickGameMultiplayerSpawner", "[Server] WinCondition 이벤트 구독 해제 완료");
+    }
+
+    /// <summary>
+    /// [Server] 게임 종료 처리 → ClientRpc로 동기화
+    /// </summary>
+    private void HandleGameEnded(int winnerID, int loserID)
+    {
+        GameLogger.Success("BrickGameMultiplayerSpawner",
+            $"[Server] 게임 종료! 승자: Player {winnerID}, 패자: Player {loserID} → ClientRpc 전송");
+
+        // 모든 클라이언트에 동기화
+        NotifyGameEndedClientRpc(winnerID, loserID);
+    }
+
+    /// <summary>
+    /// [ClientRpc] 모든 클라이언트에 게임 종료 알림
+    /// </summary>
+    [ClientRpc]
+    private void NotifyGameEndedClientRpc(int winnerID, int loserID)
+    {
+        // Host는 이미 처리함
+        if (IsServer)
+        {
+            GameLogger.Info("BrickGameMultiplayerSpawner", "[ClientRpc] Host는 이미 처리됨 - 스킵");
+            return;
+        }
+
+        GameLogger.Success("BrickGameMultiplayerSpawner",
+            $"[ClientRpc] 게임 종료 수신! 승자: Player {winnerID}, 패자: Player {loserID}");
+
+        // 클라이언트의 GameManager.WinCondition에 알림
+        Managers.Game?.WinCondition?.ProcessGameEndedFromServer(winnerID, loserID);
+    }
+    #endregion
+
     public override void OnNetworkDespawn()
     {
         if (IsServer)
@@ -356,6 +441,12 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
                 }
             }
             _scoreHandlers.Clear();
+
+            // WinCondition 구독 해제 (GameManager 레벨)
+            UnsubscribeWinConditionEvents();
+
+            // WinConditionManager 정리 (Cannon.OnCannonDestroyed 구독 해제)
+            Managers.Game?.CleanupWinCondition();
         }
 
         // Client: NetworkVariable 콜백 해제
@@ -437,6 +528,8 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
 
                 // ✅ 7. 점수 변경 이벤트 구독 (NetworkVariable로 동기화)
                 ConnectPlayerScoreSync(clientId, playerGame);
+
+                // ✅ 8. 승리 조건은 GameManager 레벨에서 처리 (SubscribeWinConditionEvents에서 구독됨)
             }
         }
         else
@@ -689,6 +782,8 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
 
             // ✅ 점수 구독 해제
             DisconnectPlayerScoreSync(clientId);
+
+            // ✅ 승리 조건은 GameManager 레벨에서 처리 (OnNetworkDespawn에서 해제됨)
 
             // ✅ 플레이어 BrickGameManager 정리
             Managers.Game.CleanupPlayerGame(clientId);

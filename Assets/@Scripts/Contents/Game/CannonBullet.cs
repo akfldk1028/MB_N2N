@@ -108,6 +108,15 @@ public class CannonBullet : NetworkBehaviour
         Debug.Log($"<color=cyan>[CannonBullet] OnNetworkSpawn 시작 - IsServer={IsServer}, IsClient={IsClient}, IsSpawned={IsSpawned}</color>");
         Debug.Log($"<color=cyan>[CannonBullet] NetworkVariable 현재값 - isActive={_networkIsActive.Value}, dir={_networkDirection.Value}, speed={_networkSpeed.Value}</color>");
 
+        // ✅ 디버그: Layer 및 Collider 상태 출력
+        Collider bulletCol = GetComponent<Collider>();
+        Debug.Log($"<color=yellow>[CannonBullet] 디버그 정보:</color>\n" +
+                  $"  - Layer: {gameObject.layer} ({LayerMask.LayerToName(gameObject.layer)})\n" +
+                  $"  - Position: {transform.position}\n" +
+                  $"  - Collider: {(bulletCol != null ? bulletCol.GetType().Name : "NULL")}\n" +
+                  $"  - isTrigger: {(bulletCol != null ? bulletCol.isTrigger.ToString() : "N/A")}\n" +
+                  $"  - Rigidbody: {(_rigidbody != null ? "있음" : "NULL")}");
+
         // ✅ NetworkVariable 변경 콜백 등록
         _networkIsActive.OnValueChanged += OnActiveChanged;
         _networkDirection.OnValueChanged += OnDirectionChanged;
@@ -346,6 +355,24 @@ public class CannonBullet : NetworkBehaviour
         {
             Debug.Log($"<color=cyan>[CannonBullet] Update 이동: pos={transform.position}, dir={moveDir}, speed={moveSpeed}, velocity={_rigidbody?.linearVelocity}</color>");
             _moveLogCount++;
+        }
+
+        // ✅ 주기적으로 대포와의 거리 확인 (10프레임마다)
+        if (IsServer && Time.frameCount % 10 == 0)
+        {
+            Cannon[] allCannons = FindObjectsOfType<Cannon>();
+            foreach (var cannon in allCannons)
+            {
+                if (cannon.playerID != ownerPlayerID) // 상대방 대포만
+                {
+                    float dist = Vector3.Distance(transform.position, cannon.transform.position);
+                    if (dist < 5f) // 5 유닛 이내일 때만 로그
+                    {
+                        Debug.Log($"<color=orange>[CannonBullet] ★ 상대 대포 근접! " +
+                                  $"거리={dist:F2}, 총알Y={transform.position.y:F2}, 대포Y={cannon.transform.position.y:F2}</color>");
+                    }
+                }
+            }
         }
     }
 

@@ -584,8 +584,10 @@ public class CentralMapBulletController : NetworkBehaviour
             spawnPos.x += UnityEngine.Random.Range(-0.3f, 0.3f);
             spawnPos.z += UnityEngine.Random.Range(-0.3f, 0.3f);
 
-            Vector3 direction = cannon.turretBarrel.forward;
-            // ✅ 방향도 수평으로 (Y=0)
+            // ✅ FireDirection 사용 (centerRotation 기반 - Server/Client 동일)
+            // turretBarrel.forward는 sweeping으로 인해 Server/Client가 다를 수 있음!
+            Vector3 direction = cannon.FireDirection;
+            // 방향도 수평으로 (Y=0)
             direction.y = 0;
             direction = direction.normalized;
 
