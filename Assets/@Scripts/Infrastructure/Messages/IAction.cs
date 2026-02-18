@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace MB.Infrastructure.Messages
 {
@@ -40,7 +41,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_TerritoryChanged,  // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
         BrickGame_BulletFired,       // 총알 발사됨 (GameRule에서 발행)
         BrickGame_GameOver,          // 게임 오버 (대포 파괴됨)
-        BrickGame_GameEnded          // 게임 종료 (승자/패자 결정됨)
+        BrickGame_GameEnded,         // 게임 종료 (승자/패자 결정됨)
+        BrickGame_BallBounce         // 공 바운스 (VFX 트리거)
     }
 
     public interface IActionPayload { }
@@ -115,6 +117,36 @@ namespace MB.Infrastructure.Messages
         public BrickGameBrickDestroyedPayload(int scoreValue)
         {
             ScoreValue = scoreValue;
+        }
+    }
+
+    /// <summary>
+    /// 벽돌 파괴 VFX용 (점수 + 위치 + 색상)
+    /// </summary>
+    public readonly struct BrickDestroyedVFXPayload : IActionPayload
+    {
+        public int ScoreValue { get; }
+        public Vector3 Position { get; }
+        public Color BrickColor { get; }
+
+        public BrickDestroyedVFXPayload(int scoreValue, Vector3 position, Color brickColor)
+        {
+            ScoreValue = scoreValue;
+            Position = position;
+            BrickColor = brickColor;
+        }
+    }
+
+    /// <summary>
+    /// 공 바운스 VFX용 (충돌 위치)
+    /// </summary>
+    public readonly struct BallBounceVFXPayload : IActionPayload
+    {
+        public Vector3 Position { get; }
+
+        public BallBounceVFXPayload(Vector3 position)
+        {
+            Position = position;
         }
     }
 
