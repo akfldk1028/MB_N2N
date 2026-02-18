@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using MB.Infrastructure.Messages;
 using Unity.Assets.Scripts.Objects;
 
 namespace Unity.Assets.Scripts.Objects
@@ -261,6 +262,11 @@ namespace Unity.Assets.Scripts.Objects
             // CheckAndUnlockAchievement(bricksDestroyed, 100, "destroy100bricks", "destroy 100 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 1000, "destroy1000bricks", "destroy 1000 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 10000, "destroy10000bricks", "destroy 10000 bricks");
+
+            // ✅ VFX 파티클 이벤트 발행 (벽돌 파괴 위치/색상 정보)
+            Color brickColor = brickRenderer != null ? brickRenderer.material.color : Color.white;
+            Managers.PublishAction(ActionId.BrickGame_BrickDestroyed,
+                new BrickDestroyedVFXPayload(originalWave, transform.position, brickColor));
         }
 
         /// <summary>
