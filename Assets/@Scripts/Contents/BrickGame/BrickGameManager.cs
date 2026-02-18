@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Newtonsoft.Json;
 using MB.Infrastructure.Messages;
 
 /// <summary>
@@ -16,6 +17,23 @@ public class BrickGameManager
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
+    #endregion
+
+    #region 저장 데이터 (Save/Load)
+    private const string PREF_BRICKGAME_SAVE = "BrickGame_Save";
+    private BrickGameSaveData _saveData;
+
+    /// <summary>
+    /// 현재 저장 데이터 접근자 (UI에서 최고 점수 등 표시용)
+    /// Managers.Game.BrickGame.SaveData로 접근
+    /// </summary>
+    public BrickGameSaveData SaveData => _saveData;
+
+    /// <summary>
+    /// 현재 점수가 최고 기록을 갱신했는지 여부
+    /// SaveProgress() 호출 전에 확인해야 함 (저장 후에는 HighScore가 업데이트됨)
+    /// </summary>
+    public bool IsNewRecord => _state.CurrentScore > _saveData.HighScore;
     #endregion
 
     #region Network 접근 (Managers.Game.BrickGame.Network)
@@ -119,6 +137,9 @@ public class BrickGameManager
         // Sub-Manager 이벤트 구독
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
         _brickManager.OnAllBricksDestroyed += HandleAllBricksDestroyed;
+
+        // 저장 데이터 로드
+        LoadProgress();
 
         GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨");
     }
@@ -595,6 +616,61 @@ public class BrickGameManager
         }
 
         GameLogger.Success("BrickGameManager", $"다음 스테이지 시작! 레벨: {_state.CurrentLevel}");
+    }
+    #endregion
+
+    #region 저장/로드 (Save/Load Progress)
+    /// <summary>
+    /// 현재 게임 진행 상태를 PlayerPrefs에 저장
+    /// _saveData 필드를 _state 기반으로 업데이트 후 JSON 직렬화하여 저장
+    /// </summary>
+    public void SaveProgress()
+    {
+        // 최고 점수 갱신
+        if (_state.CurrentScore > _saveData.HighScore)
+            _saveData.HighScore = _state.CurrentScore;
+
+        // 최고 레벨 갱신
+        if (_state.CurrentLevel > _saveData.MaxLevel)
+            _saveData.MaxLevel = _state.CurrentLevel;
+
+        // 마지막 플레이 날짜 업데이트
+        _saveData.LastPlayDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // JSON 직렬화 후 PlayerPrefs에 저장
+        string json = JsonConvert.SerializeObject(_saveData);
+        PlayerPrefs.SetString(PREF_BRICKGAME_SAVE, json);
+        PlayerPrefs.Save();
+
+        GameLogger.Info("BrickGameManager", $"진행 상태 저장 완료 (HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel})");
+    }
+
+    /// <summary>
+    /// PlayerPrefs에서 저장된 게임 진행 상태를 로드
+    /// 저장 데이터가 없으면 기본값으로 초기화
+    /// </summary>
+    public void LoadProgress()
+    {
+        string json = PlayerPrefs.GetString(PREF_BRICKGAME_SAVE, "");
+
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                _saveData = JsonConvert.DeserializeObject<BrickGameSaveData>(json);
+                GameLogger.Info("BrickGameManager", $"진행 상태 로드 완료 (HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel})");
+            }
+            catch (Exception e)
+            {
+                GameLogger.Warning("BrickGameManager", $"저장 데이터 파싱 실패, 기본값으로 초기화: {e.Message}");
+                _saveData = new BrickGameSaveData();
+            }
+        }
+        else
+        {
+            _saveData = new BrickGameSaveData();
+            GameLogger.Info("BrickGameManager", "저장 데이터 없음, 기본값으로 초기화");
+        }
     }
     #endregion
 
