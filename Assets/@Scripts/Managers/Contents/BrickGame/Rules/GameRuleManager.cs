@@ -21,6 +21,7 @@ public class GameRuleManager
     private IGameRule _activeRule;
     private bool _initialized = false;
     private IDisposable _inputSubscription;
+    private IDisposable _centralMapFireSubscription;
 
     public IGameRule ActiveRule => _activeRule;
     public bool IsInitialized => _initialized;
@@ -154,12 +155,15 @@ public class GameRuleManager
     private void SubscribeToInputEvents()
     {
         _inputSubscription = Managers.Subscribe(ActionId.Input_Fire, OnFireInput);
+        _centralMapFireSubscription = Managers.Subscribe(ActionId.Input_CentralMapFire, OnCentralMapFireInput);
     }
 
     private void UnsubscribeFromInputEvents()
     {
         _inputSubscription?.Dispose();
         _inputSubscription = null;
+        _centralMapFireSubscription?.Dispose();
+        _centralMapFireSubscription = null;
     }
 
     private void SubscribeToRuleEvents(IGameRule rule)
@@ -179,6 +183,18 @@ public class GameRuleManager
     private void OnFireInput(ActionMessage message)
     {
         _activeRule?.OnInput(GameInputAction.Fire);
+    }
+
+    /// <summary>
+    /// Enter키 입력 처리 (CentralMap 전체 발사)
+    /// 싱글플레이어에서만 처리 - 멀티플레이어는 CentralMapBulletController가 담당
+    /// </summary>
+    private void OnCentralMapFireInput(ActionMessage message)
+    {
+        if (MultiplayerUtil.IsSinglePlayer())
+        {
+            _activeRule?.OnInput(GameInputAction.FireAll);
+        }
     }
 
     private void HandleResourceCountChanged(int count)

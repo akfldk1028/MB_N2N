@@ -109,8 +109,11 @@ public class PlankManager
         // 멀티플레이어: Owner만 입력 처리
         if (_plank.IsNetworkMode() && !_plank.IsOwner) return;
 
-        // 방향키 입력 처리
-        if (Mathf.Abs(_currentHorizontalInput) > 0.01f)
+        // 터치/마우스 입력 우선 처리 (모바일, WebGL 지원)
+        bool touchInputHandled = ProcessTouchOrMouseInput();
+
+        // 방향키 입력 처리 (터치/마우스 입력이 없을 때만)
+        if (!touchInputHandled && Mathf.Abs(_currentHorizontalInput) > 0.01f)
         {
             ProcessKeyboardMovement(deltaTime);
         }
@@ -126,6 +129,50 @@ public class PlankManager
 
         GameLogger.Info("PlankManager", $"🎮 패들 이동: {beforePosition.x:F2} → {afterPosition.x:F2}");
         OnPlankMoved?.Invoke(afterPosition);
+    }
+
+    /// <summary>
+    /// 터치/마우스 입력 처리 (모바일, WebGL 지원)
+    /// </summary>
+    /// <returns>터치/마우스 입력이 처리되었으면 true</returns>
+    private bool ProcessTouchOrMouseInput()
+    {
+        if (_mainCamera == null) return false;
+
+        Vector3 pointerPosition = Vector3.zero;
+        bool hasInput = false;
+
+        // 터치 입력 우선 (모바일)
+        if (Input.touchCount > 0)
+        {
+            Touch touch = Input.GetTouch(0);
+            pointerPosition = new Vector3(touch.position.x, touch.position.y, 0);
+            hasInput = true;
+        }
+        // 마우스 입력 (WebGL, 데스크톱)
+        else if (Input.GetMouseButton(0))
+        {
+            pointerPosition = Input.mousePosition;
+            hasInput = true;
+        }
+
+        if (hasInput)
+        {
+            Vector3 beforePosition = _plank.transform.position;
+            _plank.MoveByPointer(pointerPosition, _mainCamera);
+            Vector3 afterPosition = _plank.transform.position;
+
+            // 위치가 실제로 변경되었을 때만 이벤트 발생
+            if (Vector3.Distance(beforePosition, afterPosition) > 0.001f)
+            {
+                GameLogger.DevLog("PlankManager", $"👆 터치/마우스 이동: {beforePosition.x:F2} → {afterPosition.x:F2}");
+                OnPlankMoved?.Invoke(afterPosition);
+            }
+
+            return true;
+        }
+
+        return false;
     }
     #endregion
 

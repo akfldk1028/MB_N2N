@@ -75,6 +75,8 @@ public class BrickGameNetworkSync : BaseGameNetworkSync<BrickGameManager>
         _gameManager.OnGamePause += HandleGamePause;
         _gameManager.OnGameResume += HandleGameResume;
         _gameManager.OnGameOver += HandleGameOver;
+        _gameManager.OnStageClear += HandleStageClear;
+        _gameManager.OnVictory += HandleVictory;
         _gameManager.OnRowSpawn += HandleRowSpawn;
     }
 
@@ -88,6 +90,8 @@ public class BrickGameNetworkSync : BaseGameNetworkSync<BrickGameManager>
         _gameManager.OnGamePause -= HandleGamePause;
         _gameManager.OnGameResume -= HandleGameResume;
         _gameManager.OnGameOver -= HandleGameOver;
+        _gameManager.OnStageClear -= HandleStageClear;
+        _gameManager.OnVictory -= HandleVictory;
         _gameManager.OnRowSpawn -= HandleRowSpawn;
     }
     #endregion
@@ -145,6 +149,18 @@ public class BrickGameNetworkSync : BaseGameNetworkSync<BrickGameManager>
     {
         if (!IsServer) return;
         PublishStateChange(GamePhase.GameOver);
+    }
+
+    private void HandleStageClear()
+    {
+        if (!IsServer) return;
+        PublishStateChange(GamePhase.StageClear);
+    }
+
+    private void HandleVictory()
+    {
+        if (!IsServer) return;
+        PublishStateChange(GamePhase.Victory);
     }
 
     private void HandleRowSpawn()

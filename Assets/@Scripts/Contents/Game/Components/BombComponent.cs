@@ -249,11 +249,11 @@ public class BombComponent : MonoBehaviour, IActivatableComponent
     private bool IsBlock(GameObject obj)
     {
         // 이름으로 확인
-        if (obj.name.StartsWith("Cube_") || obj.name.StartsWith("IsometricCube"))
+        if (obj.name.StartsWith("GridBlock_") || obj.name.StartsWith("Cube_") || obj.name.StartsWith("IsometricCube"))
             return true;
 
         // 태그로 확인
-        if (obj.CompareTag("Block") || obj.CompareTag("Cube"))
+        if (obj.CompareTag("GridBlock") || obj.CompareTag("Block") || obj.CompareTag("Cube"))
             return true;
 
         return false;

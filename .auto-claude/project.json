@@ -1,0 +1,91 @@
+{
+  "$schema": "MB_N2N BrickGame Project Configuration",
+  "version": "1.0.0",
+  "profile": "unity-brickgame",
+  "base_profile": "unity",
+  "engine": {
+    "name": "Unity",
+    "version": "6000.0.32f1",
+    "render_pipeline": "URP",
+    "scripting_backend": "IL2CPP",
+    "platforms": ["Windows", "Android", "WebGL"]
+  },
+  "project": {
+    "name": "MB_N2N BrickGame",
+    "description": "듀얼 게임: 블록깨기 + 땅따먹기 (1v1 멀티플레이어)",
+    "project_dir": "D:/Data/MB_N2N/MB_N2N",
+    "scripts_root": "Assets/@Scripts",
+    "resources_root": "Assets/@Resources",
+    "prefabs_root": "Assets/@Prefabs"
+  },
+  "architecture": {
+    "pattern": "service_locator",
+    "managers_file": "Assets/@Scripts/Managers/Managers.cs",
+    "event_system": "ActionMessageBus",
+    "event_ids_file": "Assets/@Scripts/Infrastructure/Messages/IAction.cs",
+    "state_machine": "StateMachine",
+    "networking": {
+      "framework": "Netcode for GameObjects",
+      "relay": "Unity Relay (Sessions API) - ALREADY IMPLEMENTED",
+      "lobby": "Unity Lobby - ALREADY IMPLEMENTED"
+    }
+  },
+  "modules": {
+    "core": {
+      "managers": "Assets/@Scripts/Managers/Managers.cs",
+      "data": "Assets/@Scripts/Managers/Core/DataManager.cs",
+      "resource": "Assets/@Scripts/Managers/Core/ResourceManager.cs",
+      "pool": "Assets/@Scripts/Managers/Core/PoolManager.cs",
+      "ui": "Assets/@Scripts/Managers/Core/UIManager.cs",
+      "scene": "Assets/@Scripts/Managers/Core/SceneManagerEx.cs"
+    },
+    "game": {
+      "game_manager": "Assets/@Scripts/Managers/Contents/GameManager.cs",
+      "brick_game": "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs",
+      "brick_state": "Assets/@Scripts/Contents/BrickGame/BrickGameState.cs",
+      "win_condition": "Assets/@Scripts/Contents/BrickGame/WinConditionManager.cs",
+      "rules": "Assets/@Scripts/Managers/Contents/BrickGame/Rules/GameRuleManager.cs",
+      "cannon_rule": "Assets/@Scripts/Managers/Contents/BrickGame/Rules/Impl/CannonBulletRule.cs"
+    },
+    "territory": {
+      "grid": "Assets/@Scripts/Contents/Game/ColorfulCubeGrid.cs",
+      "cannon": "Assets/@Scripts/Contents/Game/Cannon.cs",
+      "bullet": "Assets/@Scripts/Contents/Game/CannonBullet.cs",
+      "bomb": "Assets/@Scripts/Contents/Game/BombComponent.cs",
+      "harvest": "Assets/@Scripts/Contents/Game/HarvestComponent.cs"
+    },
+    "network": {
+      "spawner": "Assets/@Scripts/Network/BrickGameMultiplayerSpawner.cs",
+      "sync": "Assets/@Scripts/Network/BrickGameNetworkSync.cs",
+      "bullet_pool": "Assets/@Scripts/Network/NetworkBulletPool.cs",
+      "central_map": "Assets/@Scripts/Network/CentralMapBulletController.cs",
+      "connection": "Assets/@Scripts/Network/ConnectionManagement/ConnectionManagerEx.cs"
+    },
+    "ui": {
+      "brick_scene": "Assets/@Scripts/UI/Scene/UI_BrickGameScene.cs",
+      "startup_scene": "Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs",
+      "ui_manager_brick": "Assets/@Scripts/Managers/Contents/BrickGame/UI/BrickGameUIManager.cs",
+      "score_ui": "Assets/@Scripts/Managers/Contents/BrickGame/UI/ScoreUIController.cs",
+      "territory_ui": "Assets/@Scripts/Managers/Contents/BrickGame/UI/TerritoryUIController.cs",
+      "result_ui": "Assets/@Scripts/Managers/Contents/BrickGame/UI/GameResultUIController.cs"
+    }
+  },
+  "scenes": {
+    "startup": "Assets/Scenes/StartUpScene.unity",
+    "game": "Assets/Scenes/GameScene.unity"
+  },
+  "status": {
+    "relay_integration": "COMPLETE",
+    "singleplayer": "WORKING",
+    "multiplayer": "WORKING",
+    "bugs_fixed": ["BUG-001", "BUG-002", "BUG-003", "BUG-004", "BUG-005"],
+    "bugs_remaining": ["BUG-006 (LOW)", "BUG-007 (LOW)"],
+    "missing_features": ["sound", "vfx", "settings", "save", "mobile", "pause", "tutorial"]
+  },
+  "daemon": {
+    "auto_claude_backend": "D:/Data/AC247_MB/AC247/Auto-Claude/apps/backend",
+    "custom_agents_profile": "unity-brickgame",
+    "specs_dir": ".auto-claude/specs",
+    "model": "claude-opus-4-6"
+  }
+}

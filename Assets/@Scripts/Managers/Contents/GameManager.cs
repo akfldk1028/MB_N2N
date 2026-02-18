@@ -41,6 +41,9 @@ public class GameManager
 	private WinConditionManager _winCondition = new WinConditionManager();
 	public WinConditionManager WinCondition => _winCondition;
 
+	// ✅ 사운드 바인더 (BrickGame 이벤트 → SFX/BGM 자동 재생)
+	private BrickGameSoundBinder _soundBinder;
+
 	public GameManager()
 	{
 		Debug.Log("<color=yellow>[GameManager]</color> 생성됨 (GameRuleManager, WinConditionManager 포함)");
@@ -93,6 +96,13 @@ public class GameManager
 			_brickGame.OnUpdate
 		);
 
+		// 사운드 바인더 초기화 (이벤트 → SFX 자동 재생)
+		if (_soundBinder == null)
+		{
+			_soundBinder = new BrickGameSoundBinder();
+			_soundBinder.Initialize();
+		}
+
 		GameLogger.Success("GameManager", "BrickGame 초기화 완료 및 Update 구독됨!");
 	}
 
@@ -103,6 +113,9 @@ public class GameManager
 	{
 		_brickGameUpdateSubscription?.Dispose();
 		_brickGameUpdateSubscription = null;
+
+		_soundBinder?.Dispose();
+		_soundBinder = null;
 
 		GameLogger.Info("GameManager", "BrickGame 정리 완료 (Update 구독 해제)");
 	}

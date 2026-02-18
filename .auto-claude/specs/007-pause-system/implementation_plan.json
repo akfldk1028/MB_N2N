@@ -1,0 +1,30 @@
+{
+  "status": "queue",
+  "planStatus": "queue",
+  "xstateState": "backlog",
+  "executionPhase": "backlog",
+  "taskType": "default",
+  "priority": 7,
+  "complexity": "standard",
+  "created_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-09T12:00:00Z",
+  "phases": [
+    {
+      "name": "game-pause-logic",
+      "description": "Add Pause/Resume to BrickGameManager, GamePhase.Paused"
+    },
+    {
+      "name": "pause-popup",
+      "description": "Create UI_PausePopup with continue/restart/quit/settings"
+    },
+    {
+      "name": "triggers",
+      "description": "Add pause button to game UI, handle background pause"
+    },
+    {
+      "name": "validate",
+      "description": "Compile and test pause flow"
+    }
+  ],
+  "subtasks": []
+}

@@ -27,6 +27,11 @@ public enum GamePhase
     /// <summary>
     /// 스테이지 클리어 (모든 벽돌 파괴)
     /// </summary>
-    StageClear
+    StageClear,
+
+    /// <summary>
+    /// 게임 승리 (최대 레벨 도달 후 스테이지 클리어)
+    /// </summary>
+    Victory
 }
 

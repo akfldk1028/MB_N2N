@@ -1,0 +1,30 @@
+{
+  "status": "queue",
+  "planStatus": "queue",
+  "xstateState": "backlog",
+  "executionPhase": "backlog",
+  "taskType": "default",
+  "priority": 8,
+  "complexity": "simple",
+  "created_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-09T12:00:00Z",
+  "phases": [
+    {
+      "name": "tutorial-manager",
+      "description": "Create TutorialManager with step-based overlay system"
+    },
+    {
+      "name": "tutorial-ui",
+      "description": "Create overlay UI prefab with highlight and text"
+    },
+    {
+      "name": "integration",
+      "description": "Trigger tutorial on first game start"
+    },
+    {
+      "name": "validate",
+      "description": "Compile and test tutorial flow"
+    }
+  ],
+  "subtasks": []
+}

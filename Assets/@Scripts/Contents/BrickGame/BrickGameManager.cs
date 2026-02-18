@@ -99,6 +99,8 @@ public class BrickGameManager
     public event Action OnGamePause;
     public event Action OnGameResume;
     public event Action OnGameOver;
+    public event Action OnStageClear;
+    public event Action OnVictory;
     public event Action OnRowSpawn;
     public event Action<int> OnLevelUp;
     public event Action<int> OnScoreChanged;
@@ -466,24 +468,169 @@ public class BrickGameManager
     #region 이벤트 핸들러
     /// <summary>
     /// 모든 공이 바닥에 떨어졌을 때 호출
+    /// 이것은 게임 오버가 아니라 단순히 현재 턴이 끝난 것을 의미
     /// </summary>
     private void HandleAllBallsReturned()
     {
         GameLogger.Progress("BrickGameManager", "모든 공이 바닥에 떨어짐 - 다음 턴 준비");
-        // TODO: 다음 턴 로직 (플랭크 이동, 공 재발사 등)
+
+        // 🔒 Server만 처리
+        if (!MultiplayerUtil.HasServerAuthority())
+        {
+            return;
+        }
+
+        // 게임이 활성화되어 있지 않으면 처리하지 않음 (이미 GameOver나 StageClear 상태)
+        if (!_state.IsGameActive)
+        {
+            GameLogger.Info("BrickGameManager", "게임이 활성화되지 않음 - 턴 종료 처리 생략");
+            return;
+        }
+
+        // 다음 턴 준비: 공 상태 리셋 (BallManager가 자동으로 처리)
+        // 플랭크는 현재 위치 유지
+        GameLogger.Info("BrickGameManager", "다음 턴 준비 완료");
     }
-    
+
     /// <summary>
     /// 모든 벽돌이 파괴되었을 때 호출 (스테이지 클리어)
     /// </summary>
     private void HandleAllBricksDestroyed()
     {
         GameLogger.Success("BrickGameManager", "스테이지 클리어! 모든 벽돌 파괴 완료");
-        
-        // 게임 상태 변경
+
+        // 🔒 Server만 처리
+        if (!MultiplayerUtil.HasServerAuthority())
+        {
+            return;
+        }
+
+        // 게임 상태를 StageClear로 변경
         _state.CurrentPhase = GamePhase.StageClear;
-        
-        // TODO: 스테이지 클리어 로직 (다음 스테이지 로드, 보상 등)
+
+        // 이벤트 발생
+        OnStageClear?.Invoke();
+
+        // TODO: ActionBus 발행 (ActionId.BrickGame_StageClear 필요)
+        // Managers.PublishAction(ActionId.BrickGame_StageClear, NoPayload.Instance);
+
+        // ActionBus를 통해 게임 상태 변경 알림
+        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
+            new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.StageClear));
+
+        GameLogger.Info("BrickGameManager", $"현재 레벨: {_state.CurrentLevel}, 최대 레벨: {_settings.maxLevel}");
+
+        // 최대 레벨 도달 체크
+        if (_state.CurrentLevel >= _settings.maxLevel)
+        {
+            // 게임 승리!
+            HandleVictory();
+        }
+        else
+        {
+            // 다음 레벨로 진행
+            PrepareNextStage();
+        }
+    }
+
+    /// <summary>
+    /// 게임 승리 처리 (최대 레벨 도달)
+    /// </summary>
+    private void HandleVictory()
+    {
+        GameLogger.Success("BrickGameManager", $"🎉 게임 승리! 최대 레벨({_settings.maxLevel}) 도달!");
+
+        // 게임 상태를 Victory로 변경
+        _state.CurrentPhase = GamePhase.Victory;
+
+        // 이벤트 발생
+        OnVictory?.Invoke();
+
+        // TODO: ActionBus 발행 (ActionId.BrickGame_Victory 필요)
+        // Managers.PublishAction(ActionId.BrickGame_Victory, NoPayload.Instance);
+
+        // ActionBus를 통해 게임 상태 변경 알림
+        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
+            new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.Victory));
+
+        // Sub-Managers 비활성화
+        _plankManager.Enabled = false;
+    }
+
+    /// <summary>
+    /// 다음 스테이지 준비 (레벨 증가 및 리셋)
+    /// </summary>
+    private void PrepareNextStage()
+    {
+        GameLogger.Info("BrickGameManager", "다음 스테이지 준비 중...");
+
+        // 레벨 증가
+        _state.CurrentLevel++;
+        _state.ResetRowsSpawned();
+
+        // 레벨업 이벤트 발생
+        OnLevelUp?.Invoke(_state.CurrentLevel);
+
+        // 난이도 조정
+        AdjustDifficultyByLevel();
+
+        // 게임 상태를 Playing으로 변경 (다시 진행)
+        _state.CurrentPhase = GamePhase.Playing;
+
+        // ActionBus를 통해 게임 상태 변경 알림
+        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
+            new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.Playing));
+
+        // BallManager 및 BrickManager 초기화
+        _ballManager.Initialize();
+        _brickManager.Initialize();
+
+        // Plank 위치 리셋
+        _plankManager.ResetPosition();
+
+        // 새로운 벽돌 행 생성 (BrickPlacer가 있을 경우만)
+        if (_brickPlacer != null)
+        {
+            _brickPlacer.PlaceMultipleRows(_settings.initialRowCount);
+        }
+
+        GameLogger.Success("BrickGameManager", $"다음 스테이지 시작! 레벨: {_state.CurrentLevel}");
+    }
+    #endregion
+
+    #region 게임 재시작
+    /// <summary>
+    /// 게임 재시작 (GameOver 또는 Victory 후)
+    /// </summary>
+    public void RestartGame()
+    {
+        GameLogger.Info("BrickGameManager", "게임 재시작 중...");
+
+        // 🔒 Server만 처리
+        if (!MultiplayerUtil.HasServerAuthority())
+        {
+            GameLogger.Warning("BrickGameManager", "Client는 게임 재시작 불가 (Server 권한 필요)");
+            return;
+        }
+
+        // 게임 상태 완전 초기화
+        _state.Reset();
+        _state.ResetRowsSpawned();
+        _state.ResetScore();
+
+        // GameRule 상태 리셋
+        Managers.Game?.Rules?.Reset();
+
+        // Sub-Managers 초기화
+        _ballManager.Initialize();
+        _brickManager.Initialize();
+        _plankManager.ResetPosition();
+        _plankManager.Enabled = true;
+
+        // 게임 시작
+        StartGame();
+
+        GameLogger.Success("BrickGameManager", "게임 재시작 완료!");
     }
     #endregion
 }

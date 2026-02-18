@@ -271,10 +271,10 @@ public class HarvestComponent : MonoBehaviour, IChargeableComponent
     /// </summary>
     private bool IsBlock(GameObject obj)
     {
-        if (obj.name.StartsWith("Cube_") || obj.name.StartsWith("IsometricCube"))
+        if (obj.name.StartsWith("GridBlock_") || obj.name.StartsWith("Cube_") || obj.name.StartsWith("IsometricCube"))
             return true;
 
-        if (obj.CompareTag("Block") || obj.CompareTag("Cube"))
+        if (obj.CompareTag("GridBlock") || obj.CompareTag("Block") || obj.CompareTag("Cube"))
             return true;
 
         return false;

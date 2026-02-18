@@ -1,0 +1,30 @@
+{
+  "status": "completed",
+  "planStatus": "completed",
+  "xstateState": "completed",
+  "executionPhase": "completed",
+  "taskType": "default",
+  "priority": 1,
+  "complexity": "standard",
+  "created_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-09T12:00:00Z",
+  "phases": [
+    {
+      "name": "create-sound-manager",
+      "description": "Create SoundManager.cs with BGM/SFX AudioSource pool"
+    },
+    {
+      "name": "register-in-managers",
+      "description": "Add SoundManager to Managers.cs Service Locator"
+    },
+    {
+      "name": "create-sound-binder",
+      "description": "Create BrickGameSoundBinder.cs with ActionBus event subscriptions"
+    },
+    {
+      "name": "validate",
+      "description": "Compile check and verify integration"
+    }
+  ],
+  "subtasks": []
+}

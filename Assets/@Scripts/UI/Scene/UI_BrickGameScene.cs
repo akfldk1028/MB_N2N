@@ -26,6 +26,8 @@ public class UI_BrickGameScene : UI_Scene
     {
         MyScoreText,        // 내 점수 (LocalClient)
         OpponentScoreText,  // 상대 점수 (Opponent)
+        ResultTitleText,    // 게임 결과 제목 ("Victory!" / "Game Over" / "Stage Clear!")
+        ResultScoreText,    // 게임 결과 점수
     }
 
     enum Images
@@ -33,9 +35,16 @@ public class UI_BrickGameScene : UI_Scene
         TerritoryBarFill,   // 땅따먹기 바 채움
     }
 
+    enum Buttons
+    {
+        RestartButton,      // 재시작 버튼
+        LobbyButton,        // 로비 버튼
+    }
+
     enum Objects
     {
         TerritoryBarContainer,  // 땅따먹기 바 컨테이너
+        GameResultPanel,        // 게임 결과 패널 (Victory/GameOver/StageClear)
     }
     #endregion
 
@@ -47,6 +56,7 @@ public class UI_BrickGameScene : UI_Scene
         // 1. UI 바인딩
         BindTexts(typeof(Texts));
         BindImages(typeof(Images));
+        BindButtons(typeof(Buttons));
         BindObjects(typeof(Objects));
 
         // 2. BrickGameUIManager 초기화
@@ -86,6 +96,18 @@ public class UI_BrickGameScene : UI_Scene
         var container = GetObject((int)Objects.TerritoryBarContainer);
         Managers.UI.BrickGame.Territory.BindUI(fillImage, container);
 
+        // GameResult 컨트롤러에 UI 바인딩
+        var resultTitle = GetText((int)Texts.ResultTitleText);
+        var resultScore = GetText((int)Texts.ResultScoreText);
+        var restartBtn = GetButton((int)Buttons.RestartButton);
+        var lobbyBtn = GetButton((int)Buttons.LobbyButton);
+        var resultPanel = GetObject((int)Objects.GameResultPanel);
+        Managers.UI.BrickGame.GameResult.BindUI(resultTitle, resultScore, restartBtn, lobbyBtn, resultPanel);
+
+        // GameResult 이벤트 구독 (재시작/로비 버튼)
+        Managers.UI.BrickGame.GameResult.OnRestartRequested += OnRestartRequested;
+        Managers.UI.BrickGame.GameResult.OnLobbyRequested += OnLobbyRequested;
+
         // 초기 점수 동기화 요청 (UI가 바인딩된 후 현재 상태 반영)
         Managers.UI.BrickGame.RequestSync();
 
@@ -99,8 +121,30 @@ public class UI_BrickGameScene : UI_Scene
     {
         Managers.UI.BrickGame.Score.UnbindUI();
         Managers.UI.BrickGame.Territory.UnbindUI();
+        Managers.UI.BrickGame.GameResult.OnRestartRequested -= OnRestartRequested;
+        Managers.UI.BrickGame.GameResult.OnLobbyRequested -= OnLobbyRequested;
+        Managers.UI.BrickGame.GameResult.UnbindUI();
 
         GameLogger.Info("UI_BrickGameScene", "컨트롤러 UI 바인딩 해제");
+    }
+    #endregion
+
+    #region GameResult 이벤트 핸들러
+    private void OnRestartRequested()
+    {
+        GameLogger.Info("UI_BrickGameScene", "재시작 요청");
+        Managers.UI.BrickGame.GameResult.Hide();
+
+        if (MultiplayerUtil.IsSinglePlayer())
+        {
+            Managers.Game.BrickGame?.RestartGame();
+        }
+    }
+
+    private void OnLobbyRequested()
+    {
+        GameLogger.Info("UI_BrickGameScene", "로비 복귀 요청");
+        Managers.Scene.LoadScene(Define.EScene.TitleScene);
     }
     #endregion
 

@@ -1,0 +1,34 @@
+{
+  "status": "queue",
+  "planStatus": "queue",
+  "xstateState": "backlog",
+  "executionPhase": "backlog",
+  "taskType": "default",
+  "priority": 6,
+  "complexity": "standard",
+  "created_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-09T12:00:00Z",
+  "phases": [
+    {
+      "name": "safe-area",
+      "description": "Create SafeAreaHandler component for notch devices"
+    },
+    {
+      "name": "orientation-settings",
+      "description": "Lock to portrait, set Android build settings"
+    },
+    {
+      "name": "back-button",
+      "description": "Handle Android back button in each scene"
+    },
+    {
+      "name": "haptics",
+      "description": "Add vibration feedback on brick destruction"
+    },
+    {
+      "name": "validate",
+      "description": "Compile and test on device"
+    }
+  ],
+  "subtasks": []
+}

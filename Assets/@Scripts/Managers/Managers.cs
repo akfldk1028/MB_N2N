@@ -61,12 +61,14 @@ public class Managers : MonoBehaviour
     private MapManager _map = new MapManager();
     private GameModeService _gameMode = new GameModeService();
     private CameraManager _camera = new CameraManager();
+    private SoundManager _sound = new SoundManager();
 
     public static GameManager Game { get { return Instance?._game; } }
     public static ObjectManager Object { get { return Instance?._object; } }
     public static MapManager Map { get { return Instance?._map; } }
     public static GameModeService GameMode { get { return Instance?._gameMode; } }
     public static CameraManager Camera { get { return Instance?._camera; } }
+    public static SoundManager Sound { get { return Instance?._sound; } }
     #endregion
 
     #region Core
@@ -132,6 +134,9 @@ public class Managers : MonoBehaviour
             _stateMachine = new StateMachine(_actionBus);
             GameLogger.Success("Managers", "StateMachine 생성됨");
         }
+
+        // 사운드 시스템 초기화
+        _sound.Init();
 
         // 네트워크 컴포넌트 초기화
         await InitializeNetworkComponents();
@@ -225,7 +230,7 @@ public class Managers : MonoBehaviour
             NetworkTransport = transport,
             TickRate = 60,
             ClientConnectionBufferTimeout = 10,
-            ConnectionApproval = false, // 일단 false, 나중에 승인 로직 추가 가능
+            ConnectionApproval = true, // StartingHostStateEx.ApprovalCheck에서 연결 승인 처리
             EnableSceneManagement = true,
             ForceSamePrefabs = true
         };
@@ -330,6 +335,7 @@ public class Managers : MonoBehaviour
 
     private void OnDestroy()
     {
+        _sound?.Clear();
         _stateMachine?.Dispose();
         _actionDispatcher?.Dispose();
         _actionBus?.Dispose();

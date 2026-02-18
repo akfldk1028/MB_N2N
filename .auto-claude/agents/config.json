@@ -1,0 +1,50 @@
+{
+  "$schema": "Project-level Agent Configuration - loaded by AC247 daemon via --project-dir",
+  "version": "2.0.0",
+  "description": "MB_N2N BrickGame Unity 프로젝트 전용 에이전트. AC247 범용 에이전트와 분리.",
+
+  "agents": {
+    "mb_game_logic": {
+      "prompt_file": "mb_game_logic.md",
+      "description": "BrickGame 코어 메카닉 - 점수, 레벨, 게임 흐름, 승패 판정",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7", "mcp-unity"],
+      "thinking_default": "medium"
+    },
+    "mb_network": {
+      "prompt_file": "mb_network.md",
+      "description": "Unity Relay, NetworkVariable, ServerRpc/ClientRpc, 로비, Sessions API",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7", "mcp-unity"],
+      "thinking_default": "high"
+    },
+    "mb_ui": {
+      "prompt_file": "mb_ui.md",
+      "description": "UI 컴포넌트, 팝업, ActionBus 이벤트 바인딩, 게임 결과 화면",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7", "mcp-unity"],
+      "thinking_default": "medium"
+    },
+    "mb_physics": {
+      "prompt_file": "mb_physics.md",
+      "description": "공/패들 물리, 충돌, 입력(터치/마우스/키보드), 파워업",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7", "mcp-unity"],
+      "thinking_default": "medium"
+    },
+    "mb_infrastructure": {
+      "prompt_file": "mb_infrastructure.md",
+      "description": "ActionMessageBus, StateMachine, NetworkedMessageChannel, 디자인 패턴",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7"],
+      "thinking_default": "high"
+    },
+    "mb_managers": {
+      "prompt_file": "mb_managers.md",
+      "description": "Service Locator (Managers.cs), DataManager, ResourceManager, 초기화 흐름",
+      "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+      "mcp_servers": ["context7", "mcp-unity"],
+      "thinking_default": "medium"
+    }
+  }
+}
