@@ -51,7 +51,7 @@ public class BombComponent : MonoBehaviour, IActivatableComponent
     }
 
     public bool IsActive => _isActive;
-    public bool CanUse => _remainingCooldown <= 0f && _isActive;
+    public bool CanUse => _isActive;
 
     public void Initialize(IMap map, int ownerPlayerID)
     {
@@ -75,15 +75,14 @@ public class BombComponent : MonoBehaviour, IActivatableComponent
     {
         if (!CanUse)
         {
-            Debug.Log($"<color=yellow>[BombComponent] 사용 불가 - 쿨다운: {_remainingCooldown:F1}s</color>");
+            Debug.Log($"<color=yellow>[BombComponent] 사용 불가 - 비활성 상태</color>");
             return;
         }
 
         // 폭발 실행
         ExecuteBomb();
 
-        // 쿨다운 시작
-        _remainingCooldown = cooldownTime;
+        // 게이지 소비는 MapComponentManager에서 처리
     }
 
     public void OnBlockCaptured(GameObject block, int oldOwnerID, int newOwnerID)
@@ -93,13 +92,7 @@ public class BombComponent : MonoBehaviour, IActivatableComponent
 
     public void OnTick(float deltaTime)
     {
-        // 쿨다운 감소
-        if (_remainingCooldown > 0f)
-        {
-            _remainingCooldown -= deltaTime;
-            if (_remainingCooldown < 0f)
-                _remainingCooldown = 0f;
-        }
+        // 게이지 기반 활성화로 전환 - 쿨다운 불필요
     }
 
     #endregion
