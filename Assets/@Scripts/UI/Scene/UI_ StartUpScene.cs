@@ -17,7 +17,8 @@ public class UI_StartUpScene : UI_Scene
 	enum Texts
 	{
 		DisplayText,
-		MatchingStatusText
+		MatchingStatusText,
+		HighScoreText,
 	}
 
 	enum Buttons
@@ -197,6 +198,26 @@ public class UI_StartUpScene : UI_Scene
 	    Debug.Log("ExitButton");
 	    Application.Quit();
     }
+	/// <summary>
+	/// 저장된 최고 점수를 UI에 표시
+	/// </summary>
+	private void DisplayHighScore()
+	{
+		try
+		{
+			int highScore = Managers.Game?.BrickGame?.SaveData?.HighScore ?? 0;
+			var highScoreText = GetText((int)Texts.HighScoreText);
+			if (highScoreText != null)
+			{
+				highScoreText.text = $"Best: {highScore}";
+			}
+		}
+		catch (Exception e)
+		{
+			GameLogger.Warning("UI_StartUpScene", $"최고 점수 표시 실패: {e.Message}");
+		}
+	}
+
 	void StartLoadAssets()
 	{
 		Managers.Resource.LoadAllAsync<UnityEngine.Object>("PreLoad", (key, count, totalCount) =>
@@ -216,6 +237,9 @@ public class UI_StartUpScene : UI_Scene
 
 				GetObject((int)GameObjects.StartImage).gameObject.SetActive(true);
 				// GetText((int)Texts.DisplayText).text = "Touch To Start";
+
+				// 최고 점수 표시
+				DisplayHighScore();
 			}
 		});
 	}

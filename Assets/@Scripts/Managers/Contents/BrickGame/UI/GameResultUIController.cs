@@ -27,6 +27,7 @@ public class GameResultUIController
     #region UI References
     private TMP_Text _resultTitleText;   // "승리!" or "패배..." or "스테이지 클리어!"
     private TMP_Text _resultScoreText;   // 최종 점수
+    private TMP_Text _newRecordText;     // "New Record!" 표시
     private Button _restartButton;
     private Button _lobbyButton;
     private GameObject _resultPanel;
@@ -56,6 +57,7 @@ public class GameResultUIController
     {
         _resultTitleText = null;
         _resultScoreText = null;
+        _newRecordText = null;
         _restartButton = null;
         _lobbyButton = null;
         _resultPanel = null;
@@ -67,10 +69,11 @@ public class GameResultUIController
     #endregion
 
     #region UI 바인딩
-    public void BindUI(TMP_Text titleText, TMP_Text scoreText, Button restartBtn, Button lobbyBtn, GameObject panel)
+    public void BindUI(TMP_Text titleText, TMP_Text scoreText, TMP_Text newRecordText, Button restartBtn, Button lobbyBtn, GameObject panel)
     {
         _resultTitleText = titleText;
         _resultScoreText = scoreText;
+        _newRecordText = newRecordText;
         _restartButton = restartBtn;
         _lobbyButton = lobbyBtn;
         _resultPanel = panel;
@@ -95,6 +98,7 @@ public class GameResultUIController
 
         _resultTitleText = null;
         _resultScoreText = null;
+        _newRecordText = null;
         _restartButton = null;
         _lobbyButton = null;
         _resultPanel = null;
@@ -145,6 +149,8 @@ public class GameResultUIController
         _isShowing = false;
         if (_resultPanel != null)
             _resultPanel.SetActive(false);
+        if (_newRecordText != null)
+            _newRecordText.gameObject.SetActive(false);
     }
 
     public void Refresh()
@@ -177,6 +183,15 @@ public class GameResultUIController
 
         if (_resultTitleText != null)
             _resultTitleText.text = title;
+
+        // New Record 표시 (SaveProgress 호출 전에 체크해야 함)
+        if (_newRecordText != null)
+        {
+            bool isNewRecord = Managers.Game.BrickGame?.IsNewRecord ?? false;
+            _newRecordText.gameObject.SetActive(isNewRecord);
+            if (isNewRecord)
+                _newRecordText.text = "New Record!";
+        }
 
         GameLogger.Success("GameResultUIController", $"결과 표시: {title} (Phase: {phase})");
     }

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Newtonsoft.Json;
 using MB.Infrastructure.Messages;
 
 /// <summary>
@@ -16,6 +17,30 @@ public class BrickGameManager
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
+
+    /// <summary>
+    /// 현재 세션에서 파괴한 벽돌 수 (게임 시작 시 리셋, 저장 시 누적)
+    /// </summary>
+    private int _sessionBricksDestroyed;
+    #endregion
+
+    #region 저장 데이터 (Save/Load)
+    private const string PREF_BRICKGAME_SAVE = "BrickGame_Save";
+    private BrickGameSaveData _saveData;
+
+    /// <summary>
+    /// 현재 저장 데이터 접근자 (UI에서 최고 점수 등 표시용)
+    /// Managers.Game.BrickGame.SaveData로 접근
+    /// </summary>
+    public BrickGameSaveData SaveData => _saveData;
+
+    /// <summary>
+    /// 현재 게임에서 최고 기록을 갱신했는지 여부 (캐싱됨)
+    /// 자동 저장 핸들러에서 SaveProgress() 호출 전에 확인하여 캐싱
+    /// StartGame() 호출 시 리셋됨
+    /// </summary>
+    private bool _isNewRecord;
+    public bool IsNewRecord => _isNewRecord;
     #endregion
 
     #region Network 접근 (Managers.Game.BrickGame.Network)
@@ -120,6 +145,14 @@ public class BrickGameManager
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
         _brickManager.OnAllBricksDestroyed += HandleAllBricksDestroyed;
 
+        // 저장 데이터 로드
+        LoadProgress();
+
+        // 자동 저장 이벤트 구독
+        OnGameOver += HandleSaveOnGameOver;
+        OnStageClear += HandleSaveOnStageClear;
+        OnVictory += HandleSaveOnVictory;
+
         GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨");
     }
     #endregion
@@ -184,6 +217,12 @@ public class BrickGameManager
         _state.Reset();
         _state.ResetRowsSpawned();
         _state.ResetScore();
+
+        // 세션 벽돌 파괴 카운터 리셋
+        _sessionBricksDestroyed = 0;
+
+        // 신기록 플래그 리셋
+        _isNewRecord = false;
 
         // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
         Managers.Game?.Rules?.Reset();
@@ -265,6 +304,9 @@ public class BrickGameManager
     public void AddScore(int waveValue)
     {
         _state.AddScore(waveValue);
+
+        // 세션 벽돌 파괴 카운터 증가 (점수 추가 = 벽돌 파괴)
+        _sessionBricksDestroyed++;
 
         // 이벤트 발생 (BrickGameNetworkSync가 구독 → NetworkVariable 업데이트)
         OnScoreChanged?.Invoke(_state.CurrentScore);
@@ -595,6 +637,114 @@ public class BrickGameManager
         }
 
         GameLogger.Success("BrickGameManager", $"다음 스테이지 시작! 레벨: {_state.CurrentLevel}");
+    }
+    #endregion
+
+    #region 자동 저장 핸들러 (Auto-Save Handlers)
+    /// <summary>
+    /// 신기록 여부를 SaveProgress() 호출 전에 캐싱
+    /// SaveProgress()가 HighScore를 갱신하면 비교가 불가능해지므로 사전 체크 필요
+    /// 한 번 true로 설정되면 StartGame()까지 유지 (중복 저장에도 안전)
+    /// </summary>
+    private void CheckNewRecord()
+    {
+        if (_state.CurrentScore > _saveData.HighScore)
+            _isNewRecord = true;
+    }
+
+    /// <summary>
+    /// 게임 오버 시 자동 저장
+    /// TotalGamesPlayed 증가 + HighScore/MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnGameOver()
+    {
+        CheckNewRecord();
+        _saveData.TotalGamesPlayed++;
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 게임 오버 - TotalGamesPlayed: {_saveData.TotalGamesPlayed}, 세션 벽돌: {_sessionBricksDestroyed}");
+    }
+
+    /// <summary>
+    /// 스테이지 클리어 시 자동 저장
+    /// MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnStageClear()
+    {
+        CheckNewRecord();
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        _sessionBricksDestroyed = 0; // 스테이지 클리어 후 세션 카운터 리셋 (중복 누적 방지)
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 스테이지 클리어 - MaxLevel: {_saveData.MaxLevel}");
+    }
+
+    /// <summary>
+    /// 게임 승리 시 자동 저장
+    /// TotalGamesPlayed + TotalVictories 증가 + HighScore/MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnVictory()
+    {
+        CheckNewRecord();
+        _saveData.TotalGamesPlayed++;
+        _saveData.TotalVictories++;
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 승리! - TotalVictories: {_saveData.TotalVictories}, TotalGamesPlayed: {_saveData.TotalGamesPlayed}");
+    }
+    #endregion
+
+    #region 저장/로드 (Save/Load Progress)
+    /// <summary>
+    /// 현재 게임 진행 상태를 PlayerPrefs에 저장
+    /// _saveData 필드를 _state 기반으로 업데이트 후 JSON 직렬화하여 저장
+    /// </summary>
+    public void SaveProgress()
+    {
+        // 최고 점수 갱신
+        if (_state.CurrentScore > _saveData.HighScore)
+            _saveData.HighScore = _state.CurrentScore;
+
+        // 최고 레벨 갱신
+        if (_state.CurrentLevel > _saveData.MaxLevel)
+            _saveData.MaxLevel = _state.CurrentLevel;
+
+        // 마지막 플레이 날짜 업데이트
+        _saveData.LastPlayDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // JSON 직렬화 후 PlayerPrefs에 저장
+        string json = JsonConvert.SerializeObject(_saveData);
+        PlayerPrefs.SetString(PREF_BRICKGAME_SAVE, json);
+        PlayerPrefs.Save();
+
+        GameLogger.Info("BrickGameManager", $"진행 상태 저장 완료 (HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel})");
+    }
+
+    /// <summary>
+    /// PlayerPrefs에서 저장된 게임 진행 상태를 로드
+    /// 저장 데이터가 없으면 기본값으로 초기화
+    /// </summary>
+    public void LoadProgress()
+    {
+        string json = PlayerPrefs.GetString(PREF_BRICKGAME_SAVE, "");
+
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                _saveData = JsonConvert.DeserializeObject<BrickGameSaveData>(json);
+                GameLogger.Info("BrickGameManager", $"진행 상태 로드 완료 (HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel})");
+            }
+            catch (Exception e)
+            {
+                GameLogger.Warning("BrickGameManager", $"저장 데이터 파싱 실패, 기본값으로 초기화: {e.Message}");
+                _saveData = new BrickGameSaveData();
+            }
+        }
+        else
+        {
+            _saveData = new BrickGameSaveData();
+            GameLogger.Info("BrickGameManager", "저장 데이터 없음, 기본값으로 초기화");
+        }
     }
     #endregion
 
