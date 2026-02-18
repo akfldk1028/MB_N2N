@@ -1,30 +1,336 @@
 {
-  "status": "queue",
-  "planStatus": "queue",
-  "xstateState": "backlog",
-  "executionPhase": "backlog",
-  "taskType": "default",
-  "priority": 2,
-  "complexity": "standard",
-  "created_at": "2026-02-09T12:00:00Z",
-  "updated_at": "2026-02-09T12:00:00Z",
+  "feature": "BrickGame Particle Effects (VFX Module)",
+  "workflow_type": "feature",
+  "workflow_rationale": "Adding a new VFX subsystem that follows existing patterns (SoundManager/SoundBinder). Requires infrastructure changes (ActionIds, payloads), a new manager (VFXManager), event wiring (VFXBinder), and integration with existing game objects (Brick, PhysicsBall).",
   "phases": [
     {
-      "name": "create-vfx-manager",
-      "description": "Create VFXManager with pool-based particle spawning"
+      "id": "phase-1-infrastructure",
+      "name": "Infrastructure - ActionIds and Payloads",
+      "type": "implementation",
+      "description": "Add new ActionIds for VFX events and create position-aware payloads. This is the foundation that VFXManager and VFXBinder depend on.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add new ActionIds (BrickGame_BallBounce) and VFX payloads with position data to IAction.cs. Extend BrickGameBrickDestroyedPayload with position and color. Add new BallBouncePayload with position.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'BallBounce\\|VFXPayload\\|BrickDestroyedVFXPayload' Assets/@Scripts/Infrastructure/Messages/IAction.cs",
+            "expected": "At least 2 matches confirming new types exist"
+          },
+          "status": "completed",
+          "notes": "Added BrickGame_BallBounce to ActionId enum. Created BrickDestroyedVFXPayload (ScoreValue, Position, BrickColor) and BallBounceVFXPayload (Position) as readonly structs implementing IActionPayload. Kept existing BrickGameBrickDestroyedPayload untouched for backward compatibility. Added using UnityEngine for Vector3/Color types. Verification: 5 grep matches (required ≥2). Committed as f4001df.",
+          "updated_at": "2026-02-18T14:44:58.500494+00:00"
+        }
+      ]
     },
     {
-      "name": "create-prefabs",
-      "description": "Create ParticleSystem prefabs for each VFX"
+      "id": "phase-2-vfxmanager",
+      "name": "VFXManager - Core Particle System",
+      "type": "implementation",
+      "description": "Create VFXManager POCO class that manages particle effects using PoolManager for object recycling. Follows SoundManager pattern.",
+      "depends_on": [
+        "phase-1-infrastructure"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create VFXManager.cs - POCO class with SpawnVFX(string name, Vector3 position, Color? color) method. Uses Managers.Pool for object recycling. Creates ParticleSystem prefabs programmatically at Init() time (vfx_brick_break, vfx_ball_bounce, vfx_stage_clear, vfx_victory, vfx_score_popup). Auto-returns particles to pool when ParticleSystem.isStopped via coroutine helper MonoBehaviour.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/VFXManager.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Core/SoundManager.cs",
+            "Assets/@Scripts/Managers/Core/PoolManager.cs",
+            "Assets/@Scripts/Managers/Core/ResourceManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'SpawnVFX\\|PoolManager\\|ParticleSystem' Assets/@Scripts/Managers/Contents/BrickGame/VFXManager.cs",
+            "expected": "Multiple matches confirming VFXManager has SpawnVFX, PoolManager, and ParticleSystem references"
+          },
+          "status": "completed",
+          "notes": "Created VFXManager.cs as POCO class following SoundManager pattern. Features: (1) Init() creates 5 programmatic VFX prefab templates (vfx_brick_break, vfx_ball_bounce, vfx_stage_clear, vfx_victory, vfx_score_popup) under @VFXRoot GO. (2) SpawnVFX(name, position, color?) uses Managers.Pool.Pop() for object recycling with optional color override. (3) VFXAutoReturn MonoBehaviour helper handles coroutine-based auto-return to pool when ParticleSystem.isStopped. (4) Clear() method for cleanup. (5) Each VFX has individually tuned ParticleSystem settings. Committed as b25c77d.",
+          "updated_at": "2026-02-18T14:47:51.933237+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Register VFXManager in Managers.cs - Add private VFXManager field, public static accessor (Managers.VFX), and Init() call in Awake().",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Managers/Managers.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Managers.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'VFXManager\\|_vfx\\|Managers.VFX' Assets/@Scripts/Managers/Managers.cs",
+            "expected": "At least 3 matches confirming VFXManager registration"
+          },
+          "status": "completed",
+          "notes": "Registered VFXManager in Managers.cs following exact SoundManager pattern: (1) Added `private VFXManager _vfx = new VFXManager();` in Contents region alongside other content managers. (2) Added `public static VFXManager VFX { get { return Instance?._vfx; } }` accessor. (3) Added `_vfx.Init();` in Awake() after _sound.Init(). (4) Added `_vfx?.Clear();` in OnDestroy() after _sound?.Clear(). Verification: 4 grep matches (required ≥3). Committed as 1dae2c8.",
+          "updated_at": "2026-02-18T14:49:28.256309+00:00"
+        }
+      ]
     },
     {
-      "name": "integrate-actionbus",
-      "description": "Wire VFX to ActionBus events"
+      "id": "phase-3-event-publish",
+      "name": "Event Publishing - Brick and Ball Events",
+      "type": "implementation",
+      "description": "Make Brick.cs publish BrickGame_BrickDestroyed with position data, and PhysicsBall.cs publish BrickGame_BallBounce with collision position. These events are currently missing from the codebase.",
+      "depends_on": [
+        "phase-1-infrastructure"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add ActionBus publish in Brick.cs HandleBrickDestruction() - publish BrickGame_BrickDestroyed with BrickDestroyedVFXPayload(scoreValue, transform.position, brickRenderer.material.color). This event was defined but never published.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'PublishAction.*BrickDestroyed\\|BrickDestroyedVFXPayload' Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs",
+            "expected": "At least 1 match confirming event publish added"
+          },
+          "status": "completed",
+          "notes": "Added ActionBus publish in Brick.cs HandleBrickDestruction(). Publishes BrickGame_BrickDestroyed with BrickDestroyedVFXPayload(originalWave, transform.position, brickRenderer.material.color). Added using MB.Infrastructure.Messages. Includes null-safe Color.white fallback for brickRenderer. Verification: grep confirms 2 matches for PublishAction/BrickDestroyedVFXPayload in Brick.cs.",
+          "updated_at": "2026-02-18T14:51:02.316808+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add ActionBus publish in PhysicsBall.cs HandleBrickOrWallCollision() and HandlePlankCollision() - publish BrickGame_BallBounce with BallBounceVFXPayload(contactPoint). Only publish for meaningful collisions (brick/plank), not walls.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Controllers/Object/PhysicsBall.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'PublishAction.*BallBounce\\|BallBounceVFXPayload' Assets/@Scripts/Controllers/Object/PhysicsBall.cs",
+            "expected": "At least 1 match confirming ball bounce event publish"
+          },
+          "status": "completed",
+          "notes": "Added ActionBus publish in PhysicsBall.cs for BallBounce VFX events. (1) Added `using MB.Infrastructure.Messages;` import. (2) In HandleBrickOrWallCollision(), inside the Brick tag block only (not walls), publishes BrickGame_BallBounce with BallBounceVFXPayload(contactPoint). (3) In HandlePlankCollision(), publishes BrickGame_BallBounce with BallBounceVFXPayload(contactPoint). Both are server-only (guarded by HandleCollision's IsServer check). Verification: grep confirms 4 matches for PublishAction/BallBounceVFXPayload in PhysicsBall.cs. Committed as 3c196f8.",
+          "updated_at": "2026-02-18T14:53:07.827612+00:00"
+        }
+      ]
     },
     {
-      "name": "validate",
-      "description": "Compile and test"
+      "id": "phase-4-vfxbinder",
+      "name": "VFX Event Binder - Wire Events to VFX",
+      "type": "implementation",
+      "description": "Create BrickGameVFXBinder following BrickGameSoundBinder pattern. Subscribe to ActionBus events and trigger appropriate VFX.",
+      "depends_on": [
+        "phase-2-vfxmanager",
+        "phase-3-event-publish"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create BrickGameVFXBinder.cs - IDisposable class that subscribes to BrickGame_BrickDestroyed, BrickGame_BallBounce, BrickGame_GameStateChanged events and calls Managers.VFX.SpawnVFX() with appropriate VFX name and position. Follows BrickGameSoundBinder pattern exactly.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/BrickGameVFXBinder.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/BrickGameSoundBinder.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'Subscribe\\|SpawnVFX\\|IDisposable\\|BrickDestroyed\\|BallBounce\\|GameStateChanged' Assets/@Scripts/Managers/Contents/BrickGame/BrickGameVFXBinder.cs",
+            "expected": "At least 4 matches confirming event subscriptions and VFX calls"
+          },
+          "status": "completed",
+          "notes": "Created BrickGameVFXBinder.cs following BrickGameSoundBinder pattern exactly. IDisposable class with Initialize()/Dispose() lifecycle. Subscribes to 3 ActionBus events: (1) BrickGame_BrickDestroyed -> SpawnVFX(vfx_brick_break, position, brickColor) using BrickDestroyedVFXPayload, (2) BrickGame_BallBounce -> SpawnVFX(vfx_ball_bounce, position) using BallBounceVFXPayload, (3) BrickGame_GameStateChanged -> SpawnVFX(vfx_stage_clear/vfx_victory, Vector3.zero) for StageClear/Victory phases using BrickGameStatePayload. Uses VFXManager constants for VFX names. Verification: 14 grep matches (required ≥4). Committed as f258b6f.",
+          "updated_at": "2026-02-18T14:55:11.029947+00:00"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Register BrickGameVFXBinder in GameManager.cs - Add private field, initialize alongside BrickGameSoundBinder in InitializeBrickGame(), dispose in CleanupBrickGame(). Follow exact SoundBinder registration pattern.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Managers/Contents/GameManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Contents/GameManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'VFXBinder\\|_vfxBinder' Assets/@Scripts/Managers/Contents/GameManager.cs",
+            "expected": "At least 3 matches confirming VFXBinder registration"
+          },
+          "status": "completed",
+          "notes": "Registered BrickGameVFXBinder in GameManager.cs following exact SoundBinder pattern: private field, initialize in InitializeBrickGame(), dispose in CleanupBrickGame(). Verification passed with 6 matches.",
+          "updated_at": "2026-02-18T14:56:31.855487+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-integration",
+      "name": "Integration and Compile Verification",
+      "type": "integration",
+      "description": "Verify all files compile correctly together, check for namespace issues, missing references, and ensure the complete VFX pipeline works: event publish -> ActionBus -> VFXBinder -> VFXManager -> PoolManager -> ParticleSystem.",
+      "depends_on": [
+        "phase-4-vfxbinder"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Full compilation check - verify all C# files compile with 0 errors. Check using statements, namespace references, type compatibility. Fix any compilation issues.",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review all modified/created files for: 1) Correct using statements (MB.Infrastructure.Messages, UnityEngine), 2) Proper namespace usage, 3) Type compatibility (IActionPayload implementations), 4) PoolManager API usage matches existing pattern, 5) ActionBus subscribe/publish matches existing pattern, 6) No circular dependencies."
+          },
+          "status": "completed",
+          "notes": "Full compilation check PASSED - 0 errors. All 7 files verified: (1) IAction.cs - correct using statements, BrickDestroyedVFXPayload/BallBounceVFXPayload as readonly structs implementing IActionPayload, BrickGame_BallBounce in ActionId enum; (2) VFXManager.cs - POCO pattern matching SoundManager, PoolManager Pop/Push API correct, VFXAutoReturn MonoBehaviour coroutine lifecycle correct; (3) Managers.cs - VFX registration follows Sound pattern (field+accessor+Init+Clear); (4) Brick.cs - using MB.Infrastructure.Messages present, PublishAction with BrickDestroyedVFXPayload(int,Vector3,Color) type-correct; (5) PhysicsBall.cs - using MB.Infrastructure.Messages present, BallBounceVFXPayload(Vector3) in both collision handlers; (6) BrickGameVFXBinder.cs - IDisposable pattern matches SoundBinder, TryGetPayload generics correct, GamePhase enum values exist; (7) GameManager.cs - _vfxBinder lifecycle matches _soundBinder pattern. No circular dependencies, all cross-namespace references resolve.",
+          "updated_at": "2026-02-18T14:59:51.879050+00:00"
+        }
+      ]
     }
   ],
-  "subtasks": []
+  "summary": {
+    "total_phases": 5,
+    "total_subtasks": 8,
+    "services_involved": [
+      "unity"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-2-vfxmanager",
+            "phase-3-event-publish"
+          ],
+          "reason": "Both depend only on phase-1-infrastructure, modify different file sets (Managers vs Controllers)"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "1.3x faster with 2 workers for phases 2+3, but single-service project benefits from sequential for compile safety"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 002 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "compile_check"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All C# files compile with 0 errors in Unity Editor",
+      "VFXManager registered in Managers.cs and accessible via Managers.VFX",
+      "BrickGameVFXBinder subscribes to BrickDestroyed, BallBounce, GameStateChanged events",
+      "Brick.cs publishes BrickGame_BrickDestroyed with position data on destruction",
+      "PhysicsBall.cs publishes BrickGame_BallBounce with contact position on brick/plank collision",
+      "ParticleSystem objects are pooled via PoolManager (no direct Instantiate/Destroy)",
+      "VFX auto-returns to pool when ParticleSystem finishes playing"
+    ],
+    "verification_steps": [
+      {
+        "name": "Code Review - Pattern Compliance",
+        "command": "grep -r 'Managers.VFX' Assets/@Scripts/ --include='*.cs'",
+        "expected_outcome": "VFXManager is accessible via Managers.VFX pattern",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Code Review - Event Pipeline",
+        "command": "grep -r 'PublishAction.*BrickDestroyed\\|PublishAction.*BallBounce' Assets/@Scripts/ --include='*.cs'",
+        "expected_outcome": "Events are published from Brick.cs and PhysicsBall.cs",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Code Review - Pool Usage",
+        "command": "grep -r 'Pool.Pop\\|Pool.Push' Assets/@Scripts/Managers/Contents/BrickGame/VFXManager.cs",
+        "expected_outcome": "VFXManager uses PoolManager for particle recycling",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Medium risk - adds new manager and modifies existing game objects (Brick, PhysicsBall). Unity project cannot run automated tests via CLI, so verification is code-review based checking pattern compliance."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null,
+      "notes": "Unity project - no CLI-runnable unit tests available"
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": [],
+      "notes": "Unity game - verification is in-editor play mode"
+    },
+    "compile_verification": {
+      "required": true,
+      "checks": [
+        "All .cs files have correct using statements",
+        "No missing type references",
+        "No namespace conflicts",
+        "ActionId enum has new entries",
+        "IActionPayload implementations are readonly structs"
+      ]
+    },
+    "code_pattern_verification": {
+      "required": true,
+      "checks": [
+        "VFXManager follows SoundManager POCO pattern",
+        "BrickGameVFXBinder follows BrickGameSoundBinder pattern exactly",
+        "Managers.cs registration follows existing Contents pattern",
+        "GameManager.cs binder lifecycle follows SoundBinder pattern",
+        "Event payloads follow existing readonly struct pattern"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2026-02-18T14:59:51.879050+00:00"
 }
