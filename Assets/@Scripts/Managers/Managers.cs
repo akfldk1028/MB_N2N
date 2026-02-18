@@ -341,6 +341,14 @@ public class Managers : MonoBehaviour
         _actionBus?.Dispose();
     }
 
+    private void OnApplicationPause(bool pauseStatus)
+    {
+        if (pauseStatus)
+        {
+            _game?.BrickGame?.SaveProgress();
+        }
+    }
+
     #region Public Methods
     public static IDisposable Subscribe(ActionId actionId, Action handler)
     {
