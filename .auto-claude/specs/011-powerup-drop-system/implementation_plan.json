@@ -1,0 +1,398 @@
+{
+  "feature": "PowerUp Drop System - Probabilistic item drops from destroyed bricks",
+  "workflow_type": "feature",
+  "workflow_rationale": "New game feature that requires creating new files (PowerUpType, PowerUpItem, PowerUpDropManager), modifying existing infrastructure (ActionId/payload, Brick.cs, BrickGameManager.cs), and wiring them together. Single service (Unity) but multi-layer (infrastructure, controllers, managers).",
+  "phases": [
+    {
+      "id": "phase-1-infrastructure",
+      "name": "Event Infrastructure",
+      "type": "implementation",
+      "description": "Enhance the ActionBus event system to support brick destruction events with position data, and publish the event from Brick.cs. This is the foundation that PowerUpDropManager will subscribe to.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Enhance BrickGameBrickDestroyedPayload with Position and OwnerClientId fields, and add BrickGame_PowerUpCollected ActionId to the ActionId enum in IAction.cs",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "details": {
+            "changes": [
+              "Add Vector3 Position and ulong OwnerClientId to BrickGameBrickDestroyedPayload struct (add 'using UnityEngine;' at top for Vector3)",
+              "Add BrickGame_PowerUpCollected to ActionId enum (for future use when powerup is picked up)",
+              "Create BrickGamePowerUpCollectedPayload readonly struct with PowerUpType field (int for now since enum not yet created)"
+            ],
+            "important_notes": [
+              "BrickGameBrickDestroyedPayload is readonly struct : IActionPayload",
+              "Follow existing pattern: constructor with all fields, get-only properties",
+              "Vector3 needs UnityEngine namespace import at top of file"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify IAction.cs compiles by checking: 1) BrickGameBrickDestroyedPayload has Position (Vector3) and OwnerClientId (ulong) properties. 2) BrickGame_PowerUpCollected ActionId exists. 3) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Enhanced BrickGameBrickDestroyedPayload with Position (Vector3) and OwnerClientId (ulong) fields. Added BrickGame_PowerUpCollected ActionId to the enum. Added using UnityEngine for Vector3. Commit: e7f6779",
+          "updated_at": "2026-02-18T15:16:06.343054+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Modify Brick.cs to publish BrickGame_BrickDestroyed event with enhanced payload (position + ownerClientId) when a brick is destroyed, in both HandleBallCollision and TakeDamage flows",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs",
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "details": {
+            "changes": [
+              "Add 'using MB.Infrastructure.Messages;' import at top",
+              "In HandleBrickDestruction(), add: Managers.PublishAction(ActionId.BrickGame_BrickDestroyed, new BrickGameBrickDestroyedPayload(originalWave, transform.position, OwnerClientId));",
+              "The position is transform.position of the brick being destroyed",
+              "OwnerClientId comes from the existing public property on Brick"
+            ],
+            "important_notes": [
+              "HandleBrickDestruction() is called from both HandleBallCollision() and TakeDamage() - only need to add the publish in HandleBrickDestruction() since both flows call it",
+              "This also fixes the existing issue where BrickGame_BrickDestroyed was never published despite BrickGameSoundBinder subscribing to it",
+              "Server authority: Brick collision is already server-authoritative (IsServer check in PhysicsObject.OnCollisionEnter2D)"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify Brick.cs: 1) Has MB.Infrastructure.Messages import. 2) HandleBrickDestruction() calls Managers.PublishAction with BrickGame_BrickDestroyed and enhanced payload. 3) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Added MB.Infrastructure.Messages import and Managers.PublishAction(ActionId.BrickGame_BrickDestroyed, new BrickGameBrickDestroyedPayload(originalWave, transform.position, OwnerClientId)) call in HandleBrickDestruction(). Both HandleBallCollision and TakeDamage flows publish the event since both call HandleBrickDestruction(). Commit: 013880c",
+          "updated_at": "2026-02-18T15:17:52.433112+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-powerup-types",
+      "name": "PowerUp Core Types",
+      "type": "implementation",
+      "description": "Create the PowerUpType enum and PowerUpItem NetworkBehaviour - the core types for the drop system.",
+      "depends_on": [
+        "phase-1-infrastructure"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create PowerUpType.cs enum defining Star and BonusBall powerup types in the BrickGame PowerUp directory",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Contents/BrickGame/PowerUp/PowerUpType.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Controllers/Object/ObjectPlacement.cs"
+          ],
+          "details": {
+            "changes": [
+              "Create enum PowerUpType { None = 0, Star = 1, BonusBall = 2 }",
+              "Place in namespace or global scope matching project convention (global like GamePhase)"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify PowerUpType.cs: 1) Enum exists with None, Star, BonusBall values. 2) File is in correct directory. 3) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Created PowerUpType.cs enum with None=0, Star=1, BonusBall=2 values in Assets/@Scripts/Contents/BrickGame/PowerUp/ directory. Follows project convention (global scope, XML doc comments matching GamePhase.cs pattern). Commit: ba1c4db",
+          "updated_at": "2026-02-18T15:19:03.730311+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create PowerUpItem.cs - a PhysicsObject (NetworkBehaviour) that falls with gravity, detects Plank collision for pickup and BottomBoundary for despawn, and applies effects (Star: power boost, BonusBall: extra ball)",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/PowerUpItem.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Star.cs",
+            "Assets/@Scripts/Controllers/Object/BrickGame/BonusBall.cs",
+            "Assets/@Scripts/Controllers/Object/PhysicsObject.cs"
+          ],
+          "details": {
+            "changes": [
+              "Extend PhysicsObject (same as Star/BonusBall)",
+              "Fields: PowerUpType _powerUpType, bool isCollected, float fallSpeed = 3f",
+              "Public Initialize(PowerUpType type) method to set type after instantiation",
+              "Override OnTriggerEnter2D for Plank collision (tag 'Plank' or PhysicsPlank component)",
+              "Also check for 'BottomBoundary' tag in OnTriggerEnter2D for despawn",
+              "HandlePlankCollision(): apply effect based on powerup type, then despawn",
+              "Star effect: find balls owned by same player, call ball.PowerUp(1, 15f)",
+              "BonusBall effect: spawn extra ball at plank position (follow BonusBall.cs pattern)",
+              "Despawn pattern: StartCoroutine(DestroyAfterDelay(0.1f)) same as Star.cs",
+              "FixedUpdate: apply constant downward velocity if server (or set gravity via Rigidbody2D)",
+              "Visual: SpriteRenderer with color-coding (yellow for Star, green for BonusBall)",
+              "Set isTrigger = true on collider so it doesn't bounce off plank/walls"
+            ],
+            "important_notes": [
+              "This is DIFFERENT from existing Star/BonusBall: PowerUpItem falls to PLANK, not caught by Ball",
+              "Server authority: OnTriggerEnter2D checks if (!IsServer && IsSpawned) return;",
+              "Must use namespace Unity.Assets.Scripts.Objects to match Star.cs/BonusBall.cs",
+              "Ownership: check if plank's OwnerClientId matches powerup's OwnerClientId for multiplayer",
+              "BottomBoundary despawn: if collision with BottomBoundary tag, despawn without effect"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify PowerUpItem.cs: 1) Extends PhysicsObject. 2) Has Initialize(PowerUpType) method. 3) OnTriggerEnter2D handles Plank pickup and BottomBoundary despawn. 4) Applies correct effect per type. 5) Server authority checks present. 6) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Created PowerUpItem.cs extending PhysicsObject in namespace Unity.Assets.Scripts.Objects. Key implementation: Initialize(PowerUpType, ownerClientId) method, OnTriggerEnter2D handles Plank pickup (with multiplayer ownership check) and BottomBoundary despawn, Star effect calls ball.PowerUp() on same-owner balls, BonusBall effect spawns extra ball at plank position (follows BonusBall.cs pattern). Server authority checks: if (!IsServer && IsSpawned) return in OnTriggerEnter2D, HasAuthorityToModifyPhysics() in FixedUpdate, NetworkManager.Singleton.IsServer for spawn. Visual: SpriteRenderer color-coding (yellow=Star, green=BonusBall). isTrigger=true, constant fallSpeed=3f via rb.linearVelocity. Commit: c2c9bdd",
+          "updated_at": "2026-02-18T15:23:07.818914+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-drop-manager",
+      "name": "Drop Manager & Wiring",
+      "type": "implementation",
+      "description": "Create the PowerUpDropManager POCO class and wire it into BrickGameManager as a sub-manager.",
+      "depends_on": [
+        "phase-1-infrastructure",
+        "phase-2-powerup-types"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create PowerUpDropManager.cs - POCO class that subscribes to BrickGame_BrickDestroyed events, rolls probability table, and spawns PowerUpItem NetworkObjects on the server",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Contents/BrickGame/PowerUp/PowerUpDropManager.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BallManager.cs",
+            "Assets/@Scripts/Contents/BrickGame/Bullet/BrickGameBulletSpawner.cs",
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "details": {
+            "changes": [
+              "POCO class (NOT MonoBehaviour) following BallManager pattern",
+              "Probability table: Star 5% (0.05f), BonusBall 3% (0.03f), None 92%",
+              "Initialize() method: subscribe to BrickGame_BrickDestroyed via ActionBus, create runtime prefab",
+              "CreatePowerUpPrefab(): runtime prefab creation following BrickGameBulletSpawner.CreateBulletPrefab() pattern",
+              "OnBrickDestroyed(ActionMessage): extract position+owner from payload, roll probability, spawn if hit",
+              "SpawnPowerUpItem(Vector3 position, PowerUpType type, ulong ownerClientId): Instantiate prefab, configure, Spawn",
+              "Server authority check: MultiplayerUtil.HasServerAuthority() before spawning",
+              "Dispose() method: unsubscribe from ActionBus",
+              "Store IDisposable for subscription cleanup",
+              "Register prefab with NetworkManager.Singleton.AddNetworkPrefab()"
+            ],
+            "important_notes": [
+              "POCO class - NO MonoBehaviour inheritance",
+              "Use UnityEngine.Object.Instantiate() (static method works from POCO)",
+              "Runtime prefab: create GameObject with PowerUpItem + NetworkObject + SpriteRenderer + Rigidbody2D + CircleCollider2D(isTrigger=true)",
+              "Prefab Rigidbody2D: gravityScale = 1 (or use constant velocity in PowerUpItem.FixedUpdate)",
+              "Color-code prefab based on PowerUpType at spawn time",
+              "Random.value for probability roll (Unity's Random is accessible from POCO)",
+              "Must handle case where NetworkManager.Singleton is null (singleplayer)"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify PowerUpDropManager.cs: 1) Is POCO (no MonoBehaviour). 2) Has Initialize()/Dispose() lifecycle. 3) Subscribes to BrickGame_BrickDestroyed. 4) Probability table: Star 5%, BonusBall 3%. 5) Creates runtime prefab. 6) Server authority check before spawn. 7) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Created PowerUpDropManager.cs as a POCO class (no MonoBehaviour) following BallManager pattern. Key implementation: Initialize()/Dispose() lifecycle, subscribes to BrickGame_BrickDestroyed via ActionBus, probability table (Star 5%, BonusBall 3%, None 92%), creates runtime prefab with PowerUpItem + NetworkObject + Rigidbody2D + CircleCollider2D(isTrigger) + SpriteRenderer, server authority check via MultiplayerUtil.HasServerAuthority(), IDisposable subscription cleanup, registers prefab with NetworkManager.Singleton.AddNetworkPrefab(). Commit: 40ec9d6",
+          "updated_at": "2026-02-18T15:28:21.146175+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Wire PowerUpDropManager into BrickGameManager.cs as a sub-manager - add field, constructor instantiation, Initialize/Dispose calls, and public property accessor",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "details": {
+            "changes": [
+              "Add private PowerUpDropManager _powerUpDropManager; field in Sub-Managers region",
+              "Add public PowerUpDropManager PowerUpDrop => _powerUpDropManager; property accessor",
+              "In constructor: _powerUpDropManager = new PowerUpDropManager();",
+              "In Initialize(): _powerUpDropManager.Initialize();",
+              "In StartGame(): (no additional init needed since Initialize is separate)",
+              "Consider cleanup in GameOver or when game ends: _powerUpDropManager may need no special cleanup beyond ActionBus unsubscribe"
+            ],
+            "important_notes": [
+              "Follow exact same pattern as _ballManager, _brickManager, _plankManager",
+              "PowerUpDropManager.Initialize() subscribes to ActionBus, so it must be called after Managers is ready",
+              "Access pattern: Managers.Game.BrickGame.PowerUpDrop"
+            ]
+          },
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify BrickGameManager.cs: 1) Has _powerUpDropManager field. 2) Has public PowerUpDrop property. 3) Constructor creates new PowerUpDropManager(). 4) Initialize() calls _powerUpDropManager.Initialize(). 5) No syntax errors."
+          },
+          "status": "completed",
+          "notes": "Wired PowerUpDropManager into BrickGameManager.cs following existing sub-manager pattern (PlankManager, BallManager, BrickManager). Added: 1) private PowerUpDropManager _powerUpDropManager field, 2) public PowerUpDropManager PowerUpDrop property accessor, 3) Constructor instantiation: new PowerUpDropManager(), 4) Initialize() call: _powerUpDropManager.Initialize(). Access pattern: Managers.Game.BrickGame.PowerUpDrop. Commit: e7fa0a4",
+          "updated_at": "2026-02-18T15:33:38.792674+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-validation",
+      "name": "Compilation & Integration Validation",
+      "type": "integration",
+      "description": "Verify all files compile together and the powerup drop system is correctly wired end-to-end.",
+      "depends_on": [
+        "phase-3-drop-manager"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Verify complete integration: all new and modified files compile, event flow is correct (Brick -> ActionBus -> PowerUpDropManager -> PowerUpItem -> Plank), and no circular dependencies exist",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "details": {
+            "checks": [
+              "All 3 new files exist: PowerUpType.cs, PowerUpItem.cs, PowerUpDropManager.cs",
+              "All 3 modified files updated: IAction.cs, Brick.cs, BrickGameManager.cs",
+              "Event flow: Brick.HandleBrickDestruction() -> PublishAction(BrickGame_BrickDestroyed, payload with position) -> PowerUpDropManager.OnBrickDestroyed() -> probability roll -> SpawnPowerUpItem() -> PowerUpItem falls -> OnTriggerEnter2D(Plank) -> effect applied",
+              "No namespace conflicts or missing imports",
+              "Server authority maintained throughout the flow",
+              "Multiplayer ownership correctly tracked (ownerClientId passed from brick to powerup item)"
+            ]
+          },
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Review all new files for compilation errors",
+              "Trace event flow from Brick destruction to PowerUpItem effect application",
+              "Verify server authority at each step",
+              "Verify multiplayer ownership chain",
+              "Check that PowerUpItem despawns on BottomBoundary",
+              "Ensure no MonoBehaviour on PowerUpDropManager (POCO requirement)"
+            ]
+          },
+          "status": "completed",
+          "notes": "Integration validation complete. All 6 files verified (3 new: PowerUpType.cs, PowerUpItem.cs, PowerUpDropManager.cs; 3 modified: IAction.cs, Brick.cs, BrickGameManager.cs). Event flow traced end-to-end: Brick -> ActionBus -> PowerUpDropManager -> PowerUpItem -> Plank/BottomBoundary. Server authority verified at every step. Multiplayer ownership chain verified: Brick.OwnerClientId -> Payload -> PowerUpDropManager -> PowerUpItem._ownerClientId -> collision checks. PowerUpDropManager confirmed POCO (no MonoBehaviour). No circular dependencies. No compilation issues found. All 8 acceptance criteria checks passed.",
+          "updated_at": "2026-02-18T15:38:54.477400+00:00"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 4,
+    "total_subtasks": 6,
+    "services_involved": [
+      "unity"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution - single service, file dependencies between phases"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 011 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All new and modified files compile without errors (0 errors)",
+      "Brick destruction publishes BrickGame_BrickDestroyed event with position and owner data",
+      "PowerUpDropManager subscribes to event and rolls probability (Star 5%, BonusBall 3%, None 92%)",
+      "PowerUpItem falls with gravity and is collected by Plank (paddle)",
+      "Star effect: increases ball attack power",
+      "BonusBall effect: spawns additional ball",
+      "Server Authority maintained for all drop decisions and spawning",
+      "Multiplayer: each player area has independent drops"
+    ],
+    "verification_steps": [
+      {
+        "name": "Code Review - New Files",
+        "command": "Review PowerUpType.cs, PowerUpItem.cs, PowerUpDropManager.cs",
+        "expected_outcome": "Files follow codebase conventions, no syntax errors",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Code Review - Modified Files",
+        "command": "Review changes to IAction.cs, Brick.cs, BrickGameManager.cs",
+        "expected_outcome": "Changes are minimal and correct, existing functionality preserved",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Event Flow Trace",
+        "command": "Trace: Brick destroyed -> ActionBus -> PowerUpDropManager -> PowerUpItem spawn -> fall -> Plank pickup -> effect",
+        "expected_outcome": "Complete event chain with no broken links",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Medium risk - new feature with multiple new files and modifications to core systems (ActionBus, Brick.cs, BrickGameManager.cs). Unity project without CLI compilation, so manual review is the primary verification method."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "code_review": {
+      "required": true,
+      "checks": [
+        "All files compile (no syntax errors)",
+        "PowerUpDropManager is POCO (not MonoBehaviour)",
+        "PowerUpItem extends PhysicsObject",
+        "Server authority checks present in all relevant methods",
+        "Multiplayer ownership correctly tracked",
+        "Probability table matches spec (Star 5%, BonusBall 3%)",
+        "ActionBus event published from Brick.cs with position data",
+        "PowerUpDropManager wired into BrickGameManager as sub-manager"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2026-02-18T15:38:54.477400+00:00"
+}
