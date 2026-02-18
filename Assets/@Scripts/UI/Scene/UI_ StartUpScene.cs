@@ -190,13 +190,7 @@ public class UI_StartUpScene : UI_Scene
 
     void OnClickRecipeButton(PointerEventData evt)
     {
-        GameLogger.SystemStart("UI_StartUpScene", "싱글플레이어 시작 버튼 클릭!");
-
-        // 싱글플레이어 모드로 전환
-        Managers.GameMode.SetLocalTestMode();
-
-        // 씬 전환
-        Managers.Scene.LoadScene(EScene.GameScene);
+        Managers.UI.ShowPopupUI<UI_SettingsPopup>();
     }
     void OnClickExitButton(PointerEventData evt)
     {

@@ -115,7 +115,7 @@ public class UI_GameScene : UI_Scene
 
     void OnClickSettingButton(PointerEventData evt)
     {
-		Debug.Log("OnClickSettingButton");
+		Managers.UI.ShowPopupUI<UI_SettingsPopup>();
 	}
 
     void OnClickInventoryButton(PointerEventData evt)
