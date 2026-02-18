@@ -40,7 +40,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_TerritoryChanged,  // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
         BrickGame_BulletFired,       // 총알 발사됨 (GameRule에서 발행)
         BrickGame_GameOver,          // 게임 오버 (대포 파괴됨)
-        BrickGame_GameEnded          // 게임 종료 (승자/패자 결정됨)
+        BrickGame_GameEnded,         // 게임 종료 (승자/패자 결정됨)
+        BrickGame_ComponentChargeChanged  // 컴포넌트 게이지 충전 변경 (Bomb/Harvest)
     }
 
     public interface IActionPayload { }
@@ -143,6 +144,27 @@ namespace MB.Infrastructure.Messages
         public MapComponentPayload(string componentID)
         {
             ComponentID = componentID;
+        }
+    }
+
+    /// <summary>
+    /// 컴포넌트 게이지 충전 변경 (Bomb/Harvest 게이지 상태)
+    /// </summary>
+    public readonly struct ComponentChargePayload : IActionPayload
+    {
+        public int PlayerID { get; }
+        public string ComponentID { get; }
+        public float CurrentCharge { get; }
+        public float MaxCharge { get; }
+        public float Ratio { get; }
+
+        public ComponentChargePayload(int playerID, string componentID, float currentCharge, float maxCharge, float ratio)
+        {
+            PlayerID = playerID;
+            ComponentID = componentID;
+            CurrentCharge = currentCharge;
+            MaxCharge = maxCharge;
+            Ratio = ratio;
         }
     }
 
