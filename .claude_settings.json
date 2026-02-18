@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial\\.auto-claude\\specs\\008-tutorial/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial\\.auto-claude\\specs\\008-tutorial/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\008-tutorial\\.auto-claude\\specs\\008-tutorial/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)"
+    ]
+  }
+}

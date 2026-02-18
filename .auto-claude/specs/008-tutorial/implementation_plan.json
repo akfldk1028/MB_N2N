@@ -1,30 +1,40 @@
 {
-  "status": "queue",
+  "status": "in_progress",
   "planStatus": "queue",
-  "xstateState": "backlog",
+  "xstateState": "coding",
   "executionPhase": "backlog",
   "taskType": "default",
   "priority": 8,
   "complexity": "simple",
   "created_at": "2026-02-09T12:00:00Z",
-  "updated_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-18T16:24:20.359188+00:00",
   "phases": [
     {
       "name": "tutorial-manager",
-      "description": "Create TutorialManager with step-based overlay system"
+      "description": "Create TutorialManager with step-based overlay system",
+      "phase": 1,
+      "subtasks": []
     },
     {
       "name": "tutorial-ui",
-      "description": "Create overlay UI prefab with highlight and text"
+      "description": "Create overlay UI prefab with highlight and text",
+      "phase": 2,
+      "subtasks": []
     },
     {
       "name": "integration",
-      "description": "Trigger tutorial on first game start"
+      "description": "Trigger tutorial on first game start",
+      "phase": 3,
+      "subtasks": []
     },
     {
       "name": "validate",
-      "description": "Compile and test tutorial flow"
+      "description": "Compile and test tutorial flow",
+      "phase": 4,
+      "subtasks": []
     }
   ],
-  "subtasks": []
+  "subtasks": [],
+  "feature": "Unnamed Feature",
+  "workflow_type": "feature"
 }
