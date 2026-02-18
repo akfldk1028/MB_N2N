@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using MB.Infrastructure.Messages;
 using Unity.Assets.Scripts.Objects;
 
 namespace Unity.Assets.Scripts.Objects
@@ -261,6 +262,11 @@ namespace Unity.Assets.Scripts.Objects
             // CheckAndUnlockAchievement(bricksDestroyed, 100, "destroy100bricks", "destroy 100 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 1000, "destroy1000bricks", "destroy 1000 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 10000, "destroy10000bricks", "destroy 10000 bricks");
+
+            // ✅ 벽돌 파괴 이벤트 발행 (위치 + 소유자 정보 포함)
+            // PowerUpDropManager 등이 구독하여 아이템 드롭 등을 처리
+            Managers.PublishAction(ActionId.BrickGame_BrickDestroyed,
+                new BrickGameBrickDestroyedPayload(originalWave, transform.position, OwnerClientId));
         }
 
         /// <summary>
