@@ -1,34 +1,367 @@
 {
-  "status": "queue",
-  "planStatus": "queue",
-  "xstateState": "backlog",
+  "feature": "BrickGame UI Polish - Scene Transitions, Button Animations, Result Animations, Matching Spinner",
+  "workflow_type": "feature",
+  "workflow_rationale": "Adding new UI polish features (fade transitions, button press animations, game result entrance animations, matching spinner) to an existing Unity game. All work is within a single Unity project but spans multiple UI systems.",
+  "status": "in_progress",
+  "planStatus": "approved",
+  "xstateState": "coding",
   "executionPhase": "backlog",
   "taskType": "default",
   "priority": 3,
   "complexity": "standard",
   "created_at": "2026-02-09T12:00:00Z",
-  "updated_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-18T23:50:00Z",
   "phases": [
     {
-      "name": "scene-transition",
-      "description": "Implement fade transition in SceneManagerEx"
+      "id": "phase-1-animation-utils",
+      "name": "Core Animation Utilities",
+      "type": "implementation",
+      "description": "Create reusable animation components: UIAnimationHelper (coroutine host for non-MonoBehaviour classes), ButtonAnimator (press scale feedback), and SceneTransitionManager (full-screen fade overlay). These are foundational components used by all subsequent phases.",
+      "depends_on": [],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create UIAnimationHelper.cs - A MonoBehaviour singleton that provides coroutine hosting for plain C# classes (GameResultUIController, etc.) and reusable animation utility methods (FadeCanvasGroup, ScaleTo, CountTo). Pattern follows AchievementUnlocked.cs fade approach with CanvasGroup + Mathf.Lerp.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/Animation/UIAnimationHelper.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/AchievementUnlocked.cs",
+            "Assets/@Scripts/Managers/Managers.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "find ./Assets/@Scripts/UI/Animation/UIAnimationHelper.cs -type f",
+            "expected": "File exists"
+          },
+          "status": "completed",
+          "notes": "UIAnimationHelper.cs created with: singleton pattern (DontDestroyOnLoad, lazy init like Managers.cs), StartAnimCoroutine() for coroutine hosting, FadeCanvasGroup() for alpha transitions, ScaleTo()/ScalePunch() for scale animations, CountTo() int/float overloads for text counting, GetOrAddCanvasGroup() utility. All using Mathf.Lerp, no DOTween. Committed: 7e778ad",
+          "updated_at": "2026-02-18T14:46:32.158928+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Create ButtonAnimator.cs - MonoBehaviour component implementing IPointerDownHandler and IPointerUpHandler. On pointer down, scales transform to 0.95f over ~0.05s. On pointer up, scales back to 1.0f over ~0.1s. Uses coroutine + Mathf.Lerp for smooth animation. Can be added to any Button GameObject.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/Animation/ButtonAnimator.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/UI_EventHandler.cs",
+            "Assets/@Scripts/UI/AchievementUnlocked.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "find ./Assets/@Scripts/UI/Animation/ButtonAnimator.cs -type f",
+            "expected": "File exists"
+          },
+          "status": "completed",
+          "notes": "ButtonAnimator.cs created with: IPointerDownHandler/IPointerUpHandler implementation, coroutine + Mathf.Lerp scale animation, SerializeField for pressScale(0.95f)/pressDownDuration(0.05s)/pressUpDuration(0.1s), previous animation cancellation for smooth rapid input, OnDisable scale restoration. Follows UI_EventHandler.cs interface pattern and AchievementUnlocked.cs coroutine pattern. Committed: e92b915",
+          "updated_at": "2026-02-18T14:48:02.611351+00:00"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Create SceneTransitionManager.cs - MonoBehaviour singleton managing a full-screen Canvas with CanvasGroup overlay for fade transitions. Creates UI programmatically (Canvas + Image + CanvasGroup). Provides FadeIn/FadeOut coroutines (0.3s each) and a LoadSceneWithTransition method. DontDestroyOnLoad. Canvas sortingOrder set very high (9999) to overlay everything.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/Animation/SceneTransitionManager.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/AchievementUnlocked.cs",
+            "Assets/@Scripts/Managers/Core/SceneManagerEx.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "find ./Assets/@Scripts/UI/Animation/SceneTransitionManager.cs -type f",
+            "expected": "File exists"
+          },
+          "status": "in_progress",
+          "notes": "Starting implementation. Studied patterns: UIAnimationHelper singleton, Managers singleton, AchievementUnlocked CanvasGroup fade, SceneManagerEx scene loading (single + multiplayer).",
+          "updated_at": "2026-02-18T14:48:51.492959+00:00"
+        }
+      ]
     },
     {
-      "name": "button-animation",
-      "description": "Add touch feedback to buttons via UI_Base"
+      "id": "phase-2-scene-transition",
+      "name": "Scene Transition Integration",
+      "type": "implementation",
+      "description": "Integrate SceneTransitionManager into SceneManagerEx.LoadScene() so all scene transitions have fade out -> load -> fade in effect.",
+      "depends_on": [
+        "phase-1-animation-utils"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Modify SceneManagerEx.LoadScene() to use SceneTransitionManager for fade transitions. For singleplayer: fade out -> SceneManager.LoadScene -> (BaseScene.Init triggers fade in via SceneTransitionManager). For multiplayer server: fade out -> NetworkManager.SceneManager.LoadScene -> fade in on scene loaded callback. For multiplayer client: keep existing behavior (server controls scene). Add SceneManager.sceneLoaded callback to trigger fade in after scene loads.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Managers/Core/SceneManagerEx.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/Animation/SceneTransitionManager.cs"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Open Unity, navigate between scenes. Verify: 1) 0.3s black fade-out before scene load, 2) 0.3s fade-in after scene loads, 3) Both singleplayer and multiplayer paths work."
+          },
+          "status": "pending",
+          "notes": "SceneManagerEx is NOT a MonoBehaviour, so it delegates coroutine work to SceneTransitionManager. The LoadScene method should call SceneTransitionManager.Instance.LoadSceneWithTransition() which handles the full fade-out -> load -> fade-in sequence."
+        }
+      ]
     },
     {
-      "name": "result-animation",
-      "description": "Add entrance animations to GameResultUIController"
+      "id": "phase-3-button-animation",
+      "name": "Button Touch Animation",
+      "type": "implementation",
+      "description": "Add ButtonAnimator component to buttons for touch press feedback, and provide a helper in UI_Base for easy application.",
+      "depends_on": [
+        "phase-1-animation-utils"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add a static helper method to UI_Base: AddButtonAnimation(GameObject go) that adds ButtonAnimator component to a button's GameObject using Util.GetOrAddComponent pattern. This follows the existing BindEvent pattern.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/UI/UI_Base.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/UI_Base.cs",
+            "Assets/@Scripts/Utils/Util.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'AddButtonAnimation\\|ButtonAnimator' ./Assets/@Scripts/UI/UI_Base.cs",
+            "expected": "Non-zero count"
+          },
+          "status": "pending",
+          "notes": "Add: public static void AddButtonAnimation(GameObject go) { Util.GetOrAddComponent<ButtonAnimator>(go); }"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Apply ButtonAnimator to StartUpScene buttons (StartButton, RecipeButton, ExitButton) by calling AddButtonAnimation() in UI_StartUpScene.Init() after button binding. Also add extension method in Extension.cs for convenience.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Open Unity, go to StartUpScene. Click START/RECIPE/EXIT buttons. Verify: 1) Button scales to 0.95 on press, 2) Button returns to 1.0 on release, 3) Animation is smooth (~0.1s)."
+          },
+          "status": "pending",
+          "notes": "After existing BindEvent calls, add: AddButtonAnimation(GetButton((int)Buttons.StartButton).gameObject); for each button."
+        }
+      ]
     },
     {
-      "name": "matching-ui",
-      "description": "Improve matching wait UI with spinner"
+      "id": "phase-4-result-animation",
+      "name": "Game Result Entrance Animation",
+      "type": "implementation",
+      "description": "Add entrance animations to GameResultUIController: panel slide/fade in, score counting animation, title scale punch.",
+      "depends_on": [
+        "phase-1-animation-utils"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Modify GameResultUIController.ShowResult() to use animated entrance instead of instant SetActive(true). Add: 1) Panel fade-in via CanvasGroup alpha (0->1 over 0.3s), 2) Title text scale punch (start at 1.5, settle to 1.0 over 0.3s), 3) Score counting animation (0 -> final score over 1.0s) using UIAnimationHelper. Need to add CanvasGroup reference to BindUI and use UIAnimationHelper for coroutine hosting since GameResultUIController is not a MonoBehaviour.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/GameResultUIController.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/AchievementUnlocked.cs",
+            "Assets/@Scripts/UI/Animation/UIAnimationHelper.cs"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Open Unity, play a BrickGame round to completion. Verify: 1) Result panel fades in (not instant), 2) Title text has scale punch effect, 3) Score counts up from 0 to final value over ~1 second."
+          },
+          "status": "pending",
+          "notes": "Since GameResultUIController is NOT a MonoBehaviour, it MUST use UIAnimationHelper.Instance to run coroutines. Add CanvasGroup to _resultPanel in BindUI. ShowResult() calls UIAnimationHelper.Instance.StartCoroutine(AnimateResultEntrance()). AnimateResultEntrance: set panel active, CanvasGroup alpha 0->1, title scale 1.5->1.0, then start score counting coroutine."
+        }
+      ]
     },
     {
-      "name": "validate",
-      "description": "Compile and visual test"
+      "id": "phase-5-matching-ui",
+      "name": "Matching Wait UI Enhancement",
+      "type": "implementation",
+      "description": "Enhance the matching wait state in UI_StartUpScene with a rotating spinner and blinking text animation.",
+      "depends_on": [
+        "phase-1-animation-utils"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Enhance UI_StartUpScene matching UI: 1) Add a spinner (rotating Image) created programmatically during matching, 2) Make 'Matching...' text blink by animating alpha in the UpdateMatchingStatus coroutine, 3) Clean up spinner when matching completes or cancelled. The spinner is a simple white circular Image that rotates continuously using transform.Rotate in coroutine.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/AchievementUnlocked.cs"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Open Unity, go to StartUpScene, click START button to begin matching. Verify: 1) A spinner appears and rotates, 2) 'Matching...' text blinks/pulses, 3) Spinner disappears when matched or leaving."
+          },
+          "status": "pending",
+          "notes": "Create spinner programmatically: new GameObject with Image + circular sprite. Rotate in coroutine: transform.Rotate(0,0,-360*Time.deltaTime). Text blink: alternate alpha between 1.0 and 0.3 using Mathf.PingPong or sine wave. Store spinner reference to destroy on match/cancel."
+        }
+      ]
+    },
+    {
+      "id": "phase-6-validation",
+      "name": "Compile Validation and Polish",
+      "type": "integration",
+      "description": "Verify all changes compile without errors and review code quality.",
+      "depends_on": [
+        "phase-2-scene-transition",
+        "phase-3-button-animation",
+        "phase-4-result-animation",
+        "phase-5-matching-ui"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Verify all C# files compile without errors by checking syntax consistency across all modified and created files. Ensure: 1) All using directives are correct, 2) No missing references, 3) Namespace consistency, 4) Code follows existing conventions (no DOTween references, proper use of GameLogger, etc.).",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -rn 'DOTween\\|DG\\.Tweening\\|LeanTween' ./Assets/@Scripts/UI/Animation/ && echo 'FAIL: DOTween references found' || echo 'PASS: No DOTween references'",
+            "expected": "PASS: No DOTween references"
+          },
+          "status": "pending",
+          "notes": "Final check: no DOTween references, all files follow naming conventions, proper null checks, GameLogger usage consistent."
+        }
+      ]
     }
   ],
-  "subtasks": []
+  "summary": {
+    "total_phases": 6,
+    "total_subtasks": 8,
+    "services_involved": [
+      "unity"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-3-button-animation",
+            "phase-4-result-animation",
+            "phase-5-matching-ui"
+          ],
+          "reason": "All three depend only on phase-1 (core animation utils) and modify different files with no overlap"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "1x (single Unity project, recommend sequential for code consistency)"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 003 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All files compile without errors (0 errors in Unity console)",
+      "Scene transitions have fade-out (0.3s) and fade-in (0.3s)",
+      "Buttons have scale-down (0.95) touch feedback animation",
+      "Game result panel has entrance animation (fade + scale punch + score counting)",
+      "Matching wait state shows spinning indicator and blinking text",
+      "No DOTween or external tween library references",
+      "Existing UI_Base binding pattern preserved",
+      "Both singleplayer and multiplayer scene loading work correctly"
+    ],
+    "verification_steps": [
+      {
+        "name": "No DOTween References Check",
+        "command": "grep -rn 'DOTween\\|DG\\.Tweening\\|LeanTween' ./Assets/@Scripts/ || echo 'PASS'",
+        "expected_outcome": "PASS - no external tween library references",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "All Files Exist Check",
+        "command": "ls -la ./Assets/@Scripts/UI/Animation/UIAnimationHelper.cs ./Assets/@Scripts/UI/Animation/ButtonAnimator.cs ./Assets/@Scripts/UI/Animation/SceneTransitionManager.cs",
+        "expected_outcome": "All three animation utility files exist",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Manual Test",
+        "command": "echo 'Open Unity Editor and test all scenes manually'",
+        "expected_outcome": "All animations work visually as specified",
+        "type": "test",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk UI-only change. No data model changes, no API changes. All animations are visual polish using Unity's built-in coroutine system. Manual testing in Unity Editor is the primary verification method since we cannot run Unity compilation from CLI."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "manual_verification": {
+      "required": true,
+      "checks": [
+        "Open Unity Editor, open project, check Console for 0 compile errors",
+        "Play StartUpScene - verify button press animations (scale 0.95 on press)",
+        "Click START button - verify matching spinner appears and text blinks",
+        "Play a complete BrickGame round - verify result panel entrance animation",
+        "Navigate between scenes - verify fade transitions"
+      ]
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2026-02-18T14:48:51.492959+00:00"
 }
