@@ -1,0 +1,95 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Territory Component Charge & Use Loop (Bomb/Harvest)
+Workspace: 015-territory-component-loop
+Started: 2026-02-19
+
+Workflow Type: feature
+Rationale: New gameplay feature requiring POCO manager, component modifications, and UI controller. Single Unity project but multi-layer (core logic, game integration, UI).
+
+Session 1 (Planner):
+- Deep codebase investigation completed
+- Read 10+ key files to understand patterns
+- Created implementation_plan.json with 4 phases, 9 subtasks
+- Created context.json with detailed patterns and file references
+- Created project_index.json
+- Created init.sh
+
+Phase Summary:
+- Phase 1 (Core Charge System): 2 subtasks, depends on []
+  - subtask-1-1: Add ActionId + Payload to IAction.cs
+  - subtask-1-2: Create ComponentChargeManager.cs
+- Phase 2 (Game Loop Integration): 4 subtasks, depends on [phase-1]
+  - subtask-2-1: Wire into BrickGameManager
+  - subtask-2-2: Modify MapComponentManager for gauge gating
+  - subtask-2-3: Update BombComponent (remove cooldown)
+  - subtask-2-4: Update HarvestComponent (remove internal charge, update settings)
+- Phase 3 (Gauge UI): 2 subtasks, depends on [phase-1]
+  - subtask-3-1: Create ComponentGaugeUIController.cs
+  - subtask-3-2: Integrate into BrickGameUIManager
+- Phase 4 (Validation): 1 subtask, depends on [phase-2, phase-3]
+  - subtask-4-1: End-to-end code review and compile check
+
+Services Involved:
+- unity-game: All changes are C# scripts in a Unity project
+
+Parallelism Analysis:
+- Max parallel phases: 2 (Phase 2 + Phase 3 can run after Phase 1)
+- Recommended workers: 1 (sequential within single Unity project)
+- Parallel groups: [phase-2-game-integration, phase-3-ui] (no overlapping files)
+
+Key Design Decisions:
+1. ComponentChargeManager is a POCO (non-MonoBehaviour) sub-manager of BrickGameManager
+2. Gauge check happens in MapComponentManager.Use() - works for both SP and MP paths
+3. BombComponent loses cooldown gating, HarvestComponent loses internal charge gating
+4. Both components are now gated by external ComponentChargeManager gauge
+5. UI follows existing TerritoryUIController pattern as BrickGameUIManager sub-controller
+6. ActionBus event BrickGame_ComponentChargeChanged connects charge changes to UI
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 015 --parallel 1
+
+=== END SESSION 1 ===
+
+=== SESSION 2 (Validation - subtask-4-1) ===
+
+End-to-end code review completed. All 8 modified/created files reviewed.
+
+Files Reviewed (8 total):
+1. IAction.cs - ActionId enum + ComponentChargePayload struct
+2. ComponentChargeManager.cs - New POCO charge manager
+3. BrickGameManager.cs - Sub-manager wiring
+4. MapComponentManager.cs - Gauge-gated Use() flow
+5. BombComponent.cs - Simplified CanUse (no cooldown)
+6. HarvestComponent.cs - Simplified CanUse (no internal charge)
+7. ComponentGaugeUIController.cs - New UI controller
+8. BrickGameUIManager.cs - 4th sub-controller + ActionBus subscription
+
+Compile Correctness:
+- All using statements verified (no missing references)
+- All type references valid (no mismatches)
+- All method signatures match call sites
+- All interface contracts satisfied (IMapComponent, IActivatableComponent, IChargeableComponent)
+- Null-conditional chains used properly (Managers.Game?.BrickGame?.Charge)
+
+Full Loop Verification:
+1. Brick destroy -> BrickGameManager.AddScore() -> _chargeManager.OnBrickDestroyed(waveValue, 0) -> gauge += waveValue * 0.10f [OK]
+2. ComponentChargeManager.PublishChargeChanged() -> ActionId.BrickGame_ComponentChargeChanged + ComponentChargePayload -> BrickGameUIManager.OnComponentChargeChanged() -> ComponentGaugeUIController.UpdateBombGauge/UpdateHarvestGauge() [OK]
+3. Gauge full: BombCharge >= 100f or HarvestCharge >= 150f -> CanUseComponent returns true [OK]
+4. B/H key -> GameScene -> Input_UseMapComponent + MapComponentPayload -> CentralMapBulletController -> BrickGameMultiplayerSpawner.RequestUseMapComponentServerRpc() -> MapComponentManager.Use(playerID, componentID) [OK]
+5. MapComponentManager.Use() -> chargeManager.CanUseComponent() -> component.Use() -> chargeManager.ConsumeCharge() -> gauge=0 -> publishes charge changed -> UI updates [OK]
+
+ActionBus Pub/Sub Pairs:
+- BrickGame_ComponentChargeChanged: ComponentChargeManager publishes, BrickGameUIManager subscribes. ComponentChargePayload type matches. [OK]
+- Input_UseMapComponent: GameScene publishes, CentralMapBulletController subscribes. MapComponentPayload type matches. [OK]
+
+String ID Consistency:
+- "bomb" used consistently: ComponentChargeManager.BOMB_ID, BombComponent.ComponentID, GameScene, BrickGameUIManager [OK]
+- "harvest" used consistently: ComponentChargeManager.HARVEST_ID, HarvestComponent.ComponentID, GameScene, BrickGameUIManager [OK]
+
+RESULT: ALL CHECKS PASSED - No issues found.
+
+=== END SESSION 2 ===
