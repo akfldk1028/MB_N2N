@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "012-powerup-variety",
+  "state": "error",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "",
+    "id": 0,
+    "total": 0
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 3,
+    "started_at": "2026-02-19T01:25:38.191508"
+  },
+  "last_update": "2026-02-19T01:25:53.830884"
+}

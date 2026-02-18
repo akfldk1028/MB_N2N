@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety\\.auto-claude\\specs\\012-powerup-variety/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety\\.auto-claude\\specs\\012-powerup-variety/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\012-powerup-variety\\.auto-claude\\specs\\012-powerup-variety/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)"
+    ]
+  }
+}
