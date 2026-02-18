@@ -17,6 +17,11 @@ public class BrickGameManager
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
+
+    /// <summary>
+    /// 현재 세션에서 파괴한 벽돌 수 (게임 시작 시 리셋, 저장 시 누적)
+    /// </summary>
+    private int _sessionBricksDestroyed;
     #endregion
 
     #region 저장 데이터 (Save/Load)
@@ -141,6 +146,11 @@ public class BrickGameManager
         // 저장 데이터 로드
         LoadProgress();
 
+        // 자동 저장 이벤트 구독
+        OnGameOver += HandleSaveOnGameOver;
+        OnStageClear += HandleSaveOnStageClear;
+        OnVictory += HandleSaveOnVictory;
+
         GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨");
     }
     #endregion
@@ -205,6 +215,9 @@ public class BrickGameManager
         _state.Reset();
         _state.ResetRowsSpawned();
         _state.ResetScore();
+
+        // 세션 벽돌 파괴 카운터 리셋
+        _sessionBricksDestroyed = 0;
 
         // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
         Managers.Game?.Rules?.Reset();
@@ -286,6 +299,9 @@ public class BrickGameManager
     public void AddScore(int waveValue)
     {
         _state.AddScore(waveValue);
+
+        // 세션 벽돌 파괴 카운터 증가 (점수 추가 = 벽돌 파괴)
+        _sessionBricksDestroyed++;
 
         // 이벤트 발생 (BrickGameNetworkSync가 구독 → NetworkVariable 업데이트)
         OnScoreChanged?.Invoke(_state.CurrentScore);
@@ -616,6 +632,45 @@ public class BrickGameManager
         }
 
         GameLogger.Success("BrickGameManager", $"다음 스테이지 시작! 레벨: {_state.CurrentLevel}");
+    }
+    #endregion
+
+    #region 자동 저장 핸들러 (Auto-Save Handlers)
+    /// <summary>
+    /// 게임 오버 시 자동 저장
+    /// TotalGamesPlayed 증가 + HighScore/MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnGameOver()
+    {
+        _saveData.TotalGamesPlayed++;
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 게임 오버 - TotalGamesPlayed: {_saveData.TotalGamesPlayed}, 세션 벽돌: {_sessionBricksDestroyed}");
+    }
+
+    /// <summary>
+    /// 스테이지 클리어 시 자동 저장
+    /// MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnStageClear()
+    {
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        _sessionBricksDestroyed = 0; // 스테이지 클리어 후 세션 카운터 리셋 (중복 누적 방지)
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 스테이지 클리어 - MaxLevel: {_saveData.MaxLevel}");
+    }
+
+    /// <summary>
+    /// 게임 승리 시 자동 저장
+    /// TotalGamesPlayed + TotalVictories 증가 + HighScore/MaxLevel 갱신 + 세션 벽돌 수 누적
+    /// </summary>
+    private void HandleSaveOnVictory()
+    {
+        _saveData.TotalGamesPlayed++;
+        _saveData.TotalVictories++;
+        _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
+        SaveProgress();
+        GameLogger.Info("BrickGameManager", $"[자동 저장] 승리! - TotalVictories: {_saveData.TotalVictories}, TotalGamesPlayed: {_saveData.TotalGamesPlayed}");
     }
     #endregion
 
