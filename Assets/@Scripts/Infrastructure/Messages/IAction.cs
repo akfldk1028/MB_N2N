@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace MB.Infrastructure.Messages
 {
@@ -40,7 +41,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_TerritoryChanged,  // 땅따먹기 영역 변경 (멀티플레이어 경쟁)
         BrickGame_BulletFired,       // 총알 발사됨 (GameRule에서 발행)
         BrickGame_GameOver,          // 게임 오버 (대포 파괴됨)
-        BrickGame_GameEnded          // 게임 종료 (승자/패자 결정됨)
+        BrickGame_GameEnded,         // 게임 종료 (승자/패자 결정됨)
+        BrickGame_PowerUpCollected   // 파워업 아이템 획득
     }
 
     public interface IActionPayload { }
@@ -106,15 +108,19 @@ namespace MB.Infrastructure.Messages
     }
 
     /// <summary>
-    /// 벽돌 파괴 (점수 획득)
+    /// 벽돌 파괴 (점수 획득 + 위치 + 소유자 정보)
     /// </summary>
     public readonly struct BrickGameBrickDestroyedPayload : IActionPayload
     {
         public int ScoreValue { get; }
+        public Vector3 Position { get; }
+        public ulong OwnerClientId { get; }
 
-        public BrickGameBrickDestroyedPayload(int scoreValue)
+        public BrickGameBrickDestroyedPayload(int scoreValue, Vector3 position, ulong ownerClientId)
         {
             ScoreValue = scoreValue;
+            Position = position;
+            OwnerClientId = ownerClientId;
         }
     }
 
