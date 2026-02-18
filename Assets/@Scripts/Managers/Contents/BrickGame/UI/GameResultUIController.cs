@@ -19,6 +19,7 @@ public class GameResultUIController
     private GamePhase _resultPhase = GamePhase.Idle;
     private int _winnerPlayerID = -1;
     private int _loserPlayerID = -1;
+    private int _previousHighScore = 0;  // 게임 시작 시점의 최고 점수 (New Record 판별용)
 
     public bool IsShowing => _isShowing;
     public GamePhase ResultPhase => _resultPhase;
@@ -27,6 +28,7 @@ public class GameResultUIController
     #region UI References
     private TMP_Text _resultTitleText;   // "승리!" or "패배..." or "스테이지 클리어!"
     private TMP_Text _resultScoreText;   // 최종 점수
+    private TMP_Text _newRecordText;     // "New Record!" 표시 텍스트
     private Button _restartButton;
     private Button _lobbyButton;
     private GameObject _resultPanel;
@@ -49,13 +51,19 @@ public class GameResultUIController
     {
         _isShowing = false;
         _resultPhase = GamePhase.Idle;
-        GameLogger.Success("GameResultUIController", "초기화 완료");
+
+        // 게임 시작 시점의 최고 점수를 스냅샷 (New Record 판별 기준)
+        var saveData = BrickGameSaveData.Load();
+        _previousHighScore = saveData.HighScore;
+
+        GameLogger.Success("GameResultUIController", $"초기화 완료 (이전 최고 점수: {_previousHighScore})");
     }
 
     public void Cleanup()
     {
         _resultTitleText = null;
         _resultScoreText = null;
+        _newRecordText = null;
         _restartButton = null;
         _lobbyButton = null;
         _resultPanel = null;
@@ -86,6 +94,21 @@ public class GameResultUIController
         GameLogger.Success("GameResultUIController", "UI 바인딩 완료");
     }
 
+    /// <summary>
+    /// New Record 텍스트 UI 바인딩 (별도 바인딩, 선택적)
+    /// UI_BrickGameScene에서 호출
+    /// </summary>
+    public void BindNewRecordUI(TMP_Text newRecordText)
+    {
+        _newRecordText = newRecordText;
+
+        // 초기에는 숨김
+        if (_newRecordText != null)
+            _newRecordText.gameObject.SetActive(false);
+
+        GameLogger.Info("GameResultUIController", "New Record UI 바인딩 완료");
+    }
+
     public void UnbindUI()
     {
         if (_restartButton != null)
@@ -95,6 +118,7 @@ public class GameResultUIController
 
         _resultTitleText = null;
         _resultScoreText = null;
+        _newRecordText = null;
         _restartButton = null;
         _lobbyButton = null;
         _resultPanel = null;
@@ -145,6 +169,8 @@ public class GameResultUIController
         _isShowing = false;
         if (_resultPanel != null)
             _resultPanel.SetActive(false);
+        if (_newRecordText != null)
+            _newRecordText.gameObject.SetActive(false);
     }
 
     public void Refresh()
@@ -178,7 +204,16 @@ public class GameResultUIController
         if (_resultTitleText != null)
             _resultTitleText.text = title;
 
-        GameLogger.Success("GameResultUIController", $"결과 표시: {title} (Phase: {phase})");
+        // New Record 판별: 현재 점수가 게임 시작 시점의 최고 점수를 초과했는지 확인
+        bool isNewRecord = IsNewRecord();
+        if (_newRecordText != null)
+        {
+            _newRecordText.gameObject.SetActive(isNewRecord);
+            _newRecordText.text = "New Record!";
+        }
+
+        GameLogger.Success("GameResultUIController",
+            $"결과 표시: {title} (Phase: {phase}, NewRecord: {isNewRecord})");
     }
 
     private void RefreshUI()
@@ -189,6 +224,16 @@ public class GameResultUIController
             int opponentScore = Managers.UI.BrickGame.Score.OpponentScore;
             _resultScoreText.text = $"{myScore} vs {opponentScore}";
         }
+    }
+
+    /// <summary>
+    /// 현재 점수가 이전 최고 점수를 초과했는지 판별
+    /// Initialize() 시점에 스냅샷한 _previousHighScore와 비교하여 타이밍 문제 회피
+    /// </summary>
+    private bool IsNewRecord()
+    {
+        int currentScore = Managers.UI.BrickGame.Score.MyScore;
+        return currentScore > 0 && currentScore > _previousHighScore;
     }
 
     private bool IsLocalPlayerWinner(int winnerID)
