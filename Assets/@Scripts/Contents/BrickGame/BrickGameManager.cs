@@ -127,7 +127,15 @@ public class BrickGameManager
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
         _brickManager.OnAllBricksDestroyed += HandleAllBricksDestroyed;
 
-        GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨");
+        // ✅ 저장 데이터 로드 (생성 시 기존 진행 상태 복원)
+        LoadProgress();
+
+        // ✅ 자동 저장 이벤트 구독 (게임 종료/스테이지 클리어/승리 시 자동 저장)
+        OnGameOver += HandleAutoSaveProgress;
+        OnStageClear += HandleAutoSaveProgress;
+        OnVictory += HandleAutoSaveProgress;
+
+        GameLogger.SystemStart("BrickGameManager", "벽돌깨기 게임 매니저 생성됨 (진행 데이터 로드 + 자동 저장 구독)");
     }
     #endregion
     
@@ -473,6 +481,16 @@ public class BrickGameManager
     #endregion
     
     #region 이벤트 핸들러
+    /// <summary>
+    /// 자동 저장 핸들러 (OnGameOver, OnStageClear, OnVictory에서 호출)
+    /// 게임 종료/스테이지 클리어/승리 시 진행 상태를 자동 저장
+    /// </summary>
+    private void HandleAutoSaveProgress()
+    {
+        bool isNewRecord = SaveProgress();
+        GameLogger.Info("BrickGameManager", $"자동 저장 완료 (신기록: {isNewRecord})");
+    }
+
     /// <summary>
     /// 모든 공이 바닥에 떨어졌을 때 호출
     /// 이것은 게임 오버가 아니라 단순히 현재 턴이 끝난 것을 의미
