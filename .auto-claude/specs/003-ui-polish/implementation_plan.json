@@ -79,9 +79,9 @@
             "command": "find ./Assets/@Scripts/UI/Animation/SceneTransitionManager.cs -type f",
             "expected": "File exists"
           },
-          "status": "in_progress",
-          "notes": "Starting implementation. Studied patterns: UIAnimationHelper singleton, Managers singleton, AchievementUnlocked CanvasGroup fade, SceneManagerEx scene loading (single + multiplayer).",
-          "updated_at": "2026-02-18T14:48:51.492959+00:00"
+          "status": "completed",
+          "notes": "SceneTransitionManager.cs created with: singleton pattern (DontDestroyOnLoad, lazy init matching UIAnimationHelper/Managers pattern), programmatic UI creation (Canvas sortingOrder=9999 > Image black fullscreen > CanvasGroup alpha=0 blocksRaycasts=false), FadeOut() alpha 0->1 with blocksRaycasts=true, FadeIn() alpha 1->0 with blocksRaycasts=false, LoadSceneWithTransition(Action) with full fade-out -> load -> sceneLoaded wait -> fade-in sequence, LoadSceneWithTransition(Define.EScene) convenience overload, Time.unscaledDeltaTime for timeScale-independent fading, 10s timeout on scene load wait, IsTransitioning guard against double transitions. All using Mathf.Lerp coroutines, no DOTween. Committed: 3601d11",
+          "updated_at": "2026-02-18T14:50:17.981543+00:00"
         }
       ]
     },
@@ -110,8 +110,9 @@
             "type": "manual",
             "instructions": "Open Unity, navigate between scenes. Verify: 1) 0.3s black fade-out before scene load, 2) 0.3s fade-in after scene loads, 3) Both singleplayer and multiplayer paths work."
           },
-          "status": "pending",
-          "notes": "SceneManagerEx is NOT a MonoBehaviour, so it delegates coroutine work to SceneTransitionManager. The LoadScene method should call SceneTransitionManager.Instance.LoadSceneWithTransition() which handles the full fade-out -> load -> fade-in sequence."
+          "status": "completed",
+          "notes": "Modified SceneManagerEx.LoadScene() to integrate SceneTransitionManager for fade transitions. Singleplayer path: delegates to SceneTransitionManager.Instance.LoadSceneWithTransition(() => SceneManager.LoadScene(sceneName)). Multiplayer server path: delegates to SceneTransitionManager.Instance.LoadSceneWithTransition(() => networkManager.SceneManager.LoadScene(sceneName, LoadSceneMode.Single)). Multiplayer client path: unchanged (server controls scene). Added IsTransitioning guard to prevent duplicate scene loads during transition. SceneManagerEx is a plain C# class so all coroutine work is delegated to SceneTransitionManager. Committed: fe3a3a6",
+          "updated_at": "2026-02-18T14:52:37.156565+00:00"
         }
       ]
     },
@@ -142,8 +143,9 @@
             "command": "grep -c 'AddButtonAnimation\\|ButtonAnimator' ./Assets/@Scripts/UI/UI_Base.cs",
             "expected": "Non-zero count"
           },
-          "status": "pending",
-          "notes": "Add: public static void AddButtonAnimation(GameObject go) { Util.GetOrAddComponent<ButtonAnimator>(go); }"
+          "status": "completed",
+          "notes": "Added public static void AddButtonAnimation(GameObject go) to UI_Base.cs using Util.GetOrAddComponent<ButtonAnimator>(go) pattern, matching the existing BindEvent static helper convention. Verification: grep finds 2 matches (AddButtonAnimation + ButtonAnimator). Committed: e4da0ad",
+          "updated_at": "2026-02-18T14:53:47.788190+00:00"
         },
         {
           "id": "subtask-3-2",
@@ -160,8 +162,9 @@
             "type": "manual",
             "instructions": "Open Unity, go to StartUpScene. Click START/RECIPE/EXIT buttons. Verify: 1) Button scales to 0.95 on press, 2) Button returns to 1.0 on release, 3) Animation is smooth (~0.1s)."
           },
-          "status": "pending",
-          "notes": "After existing BindEvent calls, add: AddButtonAnimation(GetButton((int)Buttons.StartButton).gameObject); for each button."
+          "status": "completed",
+          "notes": "Applied ButtonAnimator to all three StartUpScene buttons (StartButton, RecipeButton, ExitButton) by calling AddButtonAnimation() extension method in UI_StartUpScene.Init() after button binding. Also added AddButtonAnimation() extension method in Extension.cs following the existing BindEvent extension pattern (delegates to UI_Base.AddButtonAnimation). Committed: c6ba8cd",
+          "updated_at": "2026-02-18T14:55:30.924238+00:00"
         }
       ]
     },
@@ -191,8 +194,9 @@
             "type": "manual",
             "instructions": "Open Unity, play a BrickGame round to completion. Verify: 1) Result panel fades in (not instant), 2) Title text has scale punch effect, 3) Score counts up from 0 to final value over ~1 second."
           },
-          "status": "pending",
-          "notes": "Since GameResultUIController is NOT a MonoBehaviour, it MUST use UIAnimationHelper.Instance to run coroutines. Add CanvasGroup to _resultPanel in BindUI. ShowResult() calls UIAnimationHelper.Instance.StartCoroutine(AnimateResultEntrance()). AnimateResultEntrance: set panel active, CanvasGroup alpha 0->1, title scale 1.5->1.0, then start score counting coroutine."
+          "status": "completed",
+          "notes": "Modified GameResultUIController.ShowResult() to use animated entrance via UIAnimationHelper coroutine hosting. Added: 1) CanvasGroup reference obtained via UIAnimationHelper.GetOrAddCanvasGroup() in BindUI, 2) Panel fade-in (0->1, 0.3s) using UIAnimationHelper.FadeCanvasGroup, 3) Title text scale punch (1.5->1.0, 0.3s) using UIAnimationHelper.ScalePunch - runs simultaneously with fade, 4) Score counting animation (0->final, 1.0s) with custom dual-value AnimateScoreCounting coroutine following CountTo pattern, 5) StopEntranceAnimation() properly stops all 4 individual coroutines (fade, scale, score, entrance), 6) Hide/Reset/Cleanup/UnbindUI all call StopEntranceAnimation for proper cleanup. All animations use Mathf.Lerp, no DOTween. Committed: 16fb085",
+          "updated_at": "2026-02-18T14:59:02.776123+00:00"
         }
       ]
     },
@@ -221,8 +225,9 @@
             "type": "manual",
             "instructions": "Open Unity, go to StartUpScene, click START button to begin matching. Verify: 1) A spinner appears and rotates, 2) 'Matching...' text blinks/pulses, 3) Spinner disappears when matched or leaving."
           },
-          "status": "pending",
-          "notes": "Create spinner programmatically: new GameObject with Image + circular sprite. Rotate in coroutine: transform.Rotate(0,0,-360*Time.deltaTime). Text blink: alternate alpha between 1.0 and 0.3 using Mathf.PingPong or sine wave. Store spinner reference to destroy on match/cancel."
+          "status": "completed",
+          "notes": "Enhanced UI_StartUpScene matching UI with: 1) Programmatic spinner - white circular Image (64x64 procedural texture) with Radial360 fill at 0.75 (3/4 arc), positioned above DisplayText, rotates continuously via transform.Rotate(0,0,-360*deltaTime) in coroutine, 2) Text blink - DisplayText alpha oscillates 0.3-1.0 using Mathf.Sin wave (frequency=3) in BlinkMatchingText coroutine, 3) Full lifecycle cleanup - CleanupMatchingUI() stops spinner/blink coroutines, destroys spinner GameObject, restores text alpha to 1.0. Called when players >= required in UpdateMatchingStatus, and in OnDestroy for scene exit cleanup. Private fields: _spinnerObject, _spinnerCoroutine, _textBlinkCoroutine, _isMatching flag. Follows AchievementUnlocked.cs patterns: programmatic UI creation, coroutine-based animation, proper cleanup. All using Mathf.Lerp/Sin, no DOTween. Committed: b99a612",
+          "updated_at": "2026-02-18T15:02:17.131797+00:00"
         }
       ]
     },
@@ -251,8 +256,9 @@
             "command": "grep -rn 'DOTween\\|DG\\.Tweening\\|LeanTween' ./Assets/@Scripts/UI/Animation/ && echo 'FAIL: DOTween references found' || echo 'PASS: No DOTween references'",
             "expected": "PASS: No DOTween references"
           },
-          "status": "pending",
-          "notes": "Final check: no DOTween references, all files follow naming conventions, proper null checks, GameLogger usage consistent."
+          "status": "completed",
+          "notes": "Compile validation PASSED. All 8 C# files reviewed thoroughly:\n\nVERIFICATION RESULTS:\n✅ No DOTween/DG.Tweening/LeanTween references found (checked entire @Scripts directory)\n✅ All 3 animation utility files exist (UIAnimationHelper.cs, ButtonAnimator.cs, SceneTransitionManager.cs)\n✅ No debug print statements in new Animation files (all use GameLogger)\n✅ All using directives correct and sufficient for types used\n✅ All referenced types verified to exist: GameLogger, Util, Define, GamePhase, Managers, ScoreUIController, BrickGameUIManager, InitBase, UI_Scene, UI_Base\n✅ Namespace consistency: All classes in global namespace (no namespace declarations)\n✅ Class hierarchy valid: UI_StartUpScene → UI_Scene → UI_Base → InitBase → MonoBehaviour\n✅ Singleton patterns consistent across UIAnimationHelper, SceneTransitionManager (matching Managers.cs pattern)\n✅ GameResultUIController correctly uses UIAnimationHelper for coroutine hosting (non-MonoBehaviour)\n✅ SceneManagerEx correctly delegates to SceneTransitionManager (non-MonoBehaviour)\n✅ Extension.cs AddButtonAnimation extension correctly delegates to UI_Base.AddButtonAnimation\n✅ Managers.UI.BrickGame.Score.MyScore/OpponentScore accessor chain verified valid\n\nMinor observations (not errors):\n- UIAnimationHelper.cs has unused 'using UnityEngine.UI' (harmless)\n- SceneManagerEx.cs has unused System.Collections/Generic usings (harmless, were pre-existing)\n- UI_Base.cs pre-existing CS0108 warning (Awake hides InitBase.Awake) - by design, not introduced by this task",
+          "updated_at": "2026-02-18T15:07:29.862476+00:00"
         }
       ]
     }
@@ -363,5 +369,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-02-18T14:48:51.492959+00:00"
+  "last_updated": "2026-02-18T15:07:29.862476+00:00"
 }
