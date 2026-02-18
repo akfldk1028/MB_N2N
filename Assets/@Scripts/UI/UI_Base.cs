@@ -79,4 +79,9 @@ public class UI_Base : InitBase
 				break;
 		}
 	}
+
+	public static void AddButtonAnimation(GameObject go)
+	{
+		Util.GetOrAddComponent<ButtonAnimator>(go);
+	}
 }
