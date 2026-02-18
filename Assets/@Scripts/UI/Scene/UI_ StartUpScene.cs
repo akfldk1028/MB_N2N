@@ -46,7 +46,12 @@ public class UI_StartUpScene : UI_Scene
 	GetButton((int)Buttons.RecipeButton).gameObject.BindEvent(OnClickRecipeButton);
 	GetButton((int)Buttons.ExitButton).gameObject.BindEvent(OnClickExitButton);
 	GetButton((int)Buttons.StartButton).gameObject.BindEvent(OnClickStartButton);
-	
+
+	// 버튼 터치 애니메이션 적용
+	GetButton((int)Buttons.StartButton).gameObject.AddButtonAnimation();
+	GetButton((int)Buttons.RecipeButton).gameObject.AddButtonAnimation();
+	GetButton((int)Buttons.ExitButton).gameObject.AddButtonAnimation();
+
 	// GetText((int)Texts.DisplayText).text = $"StartUpScene";
 	Debug.Log($"<color=cyan>[UI_StartUpScene]</color> Asset Load 합니다.");
 		StartLoadAssets();
