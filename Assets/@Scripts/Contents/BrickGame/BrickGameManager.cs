@@ -35,10 +35,12 @@ public class BrickGameManager
     public BrickGameSaveData SaveData => _saveData;
 
     /// <summary>
-    /// 현재 점수가 최고 기록을 갱신했는지 여부
-    /// SaveProgress() 호출 전에 확인해야 함 (저장 후에는 HighScore가 업데이트됨)
+    /// 현재 게임에서 최고 기록을 갱신했는지 여부 (캐싱됨)
+    /// 자동 저장 핸들러에서 SaveProgress() 호출 전에 확인하여 캐싱
+    /// StartGame() 호출 시 리셋됨
     /// </summary>
-    public bool IsNewRecord => _state.CurrentScore > _saveData.HighScore;
+    private bool _isNewRecord;
+    public bool IsNewRecord => _isNewRecord;
     #endregion
 
     #region Network 접근 (Managers.Game.BrickGame.Network)
@@ -218,6 +220,9 @@ public class BrickGameManager
 
         // 세션 벽돌 파괴 카운터 리셋
         _sessionBricksDestroyed = 0;
+
+        // 신기록 플래그 리셋
+        _isNewRecord = false;
 
         // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
         Managers.Game?.Rules?.Reset();
@@ -637,11 +642,23 @@ public class BrickGameManager
 
     #region 자동 저장 핸들러 (Auto-Save Handlers)
     /// <summary>
+    /// 신기록 여부를 SaveProgress() 호출 전에 캐싱
+    /// SaveProgress()가 HighScore를 갱신하면 비교가 불가능해지므로 사전 체크 필요
+    /// 한 번 true로 설정되면 StartGame()까지 유지 (중복 저장에도 안전)
+    /// </summary>
+    private void CheckNewRecord()
+    {
+        if (_state.CurrentScore > _saveData.HighScore)
+            _isNewRecord = true;
+    }
+
+    /// <summary>
     /// 게임 오버 시 자동 저장
     /// TotalGamesPlayed 증가 + HighScore/MaxLevel 갱신 + 세션 벽돌 수 누적
     /// </summary>
     private void HandleSaveOnGameOver()
     {
+        CheckNewRecord();
         _saveData.TotalGamesPlayed++;
         _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
         SaveProgress();
@@ -654,6 +671,7 @@ public class BrickGameManager
     /// </summary>
     private void HandleSaveOnStageClear()
     {
+        CheckNewRecord();
         _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
         _sessionBricksDestroyed = 0; // 스테이지 클리어 후 세션 카운터 리셋 (중복 누적 방지)
         SaveProgress();
@@ -666,6 +684,7 @@ public class BrickGameManager
     /// </summary>
     private void HandleSaveOnVictory()
     {
+        CheckNewRecord();
         _saveData.TotalGamesPlayed++;
         _saveData.TotalVictories++;
         _saveData.TotalBricksDestroyed += _sessionBricksDestroyed;
