@@ -28,6 +28,7 @@ public class UI_BrickGameScene : UI_Scene
         OpponentScoreText,  // 상대 점수 (Opponent)
         ResultTitleText,    // 게임 결과 제목 ("Victory!" / "Game Over" / "Stage Clear!")
         ResultScoreText,    // 게임 결과 점수
+        NewRecordText,      // "New Record!" 표시 텍스트
     }
 
     enum Images
@@ -103,6 +104,11 @@ public class UI_BrickGameScene : UI_Scene
         var lobbyBtn = GetButton((int)Buttons.LobbyButton);
         var resultPanel = GetObject((int)Objects.GameResultPanel);
         Managers.UI.BrickGame.GameResult.BindUI(resultTitle, resultScore, restartBtn, lobbyBtn, resultPanel);
+
+        // New Record 텍스트 바인딩 (선택적 - UI에 NewRecordText가 없어도 안전)
+        var newRecordText = GetText((int)Texts.NewRecordText);
+        if (newRecordText != null)
+            Managers.UI.BrickGame.GameResult.BindNewRecordUI(newRecordText);
 
         // GameResult 이벤트 구독 (재시작/로비 버튼)
         Managers.UI.BrickGame.GameResult.OnRestartRequested += OnRestartRequested;
