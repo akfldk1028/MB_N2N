@@ -16,6 +16,7 @@ public class BrickGameManager
     #region 설정 및 상태
     private BrickGameSettings _settings;
     private BrickGameState _state;
+    private BrickGameSaveData _saveData;
     #endregion
 
     #region Network 접근 (Managers.Game.BrickGame.Network)
@@ -66,8 +67,14 @@ public class BrickGameManager
             return _state.CurrentPhase;
         }
     }
+
+    /// <summary>
+    /// 저장 데이터 접근자
+    /// Managers.Game.BrickGame.SaveData로 접근
+    /// </summary>
+    public BrickGameSaveData SaveData => _saveData;
     #endregion
-    
+
     #region Sub-Managers
     // ✅ InputManager 제거: 전역 Managers.Input 사용
     // ✅ WinConditionManager 제거: GameManager 레벨로 이동 (Managers.Game.WinCondition)
@@ -595,6 +602,63 @@ public class BrickGameManager
         }
 
         GameLogger.Success("BrickGameManager", $"다음 스테이지 시작! 레벨: {_state.CurrentLevel}");
+    }
+    #endregion
+
+    #region 저장/로드 (Save & Load Progress)
+    /// <summary>
+    /// 현재 게임 진행 상태를 저장. 최고 점수, 최대 레벨, 플레이 횟수 등을 갱신.
+    /// </summary>
+    /// <returns>true면 신기록 달성 (현재 점수가 기존 최고 점수를 초과)</returns>
+    public bool SaveProgress()
+    {
+        if (_saveData == null)
+        {
+            GameLogger.Warning("BrickGameManager", "SaveData가 null입니다. LoadProgress를 먼저 호출하세요.");
+            _saveData = BrickGameSaveData.Load();
+        }
+
+        bool isNewRecord = false;
+        int currentScore = _state.CurrentScore;
+        int currentLevel = _state.CurrentLevel;
+
+        // 최고 점수 갱신
+        if (currentScore > _saveData.HighScore)
+        {
+            _saveData.HighScore = currentScore;
+            isNewRecord = true;
+            GameLogger.Success("BrickGameManager", $"🏆 신기록 달성! 새 최고 점수: {currentScore}");
+        }
+
+        // 최대 레벨 갱신
+        if (currentLevel > _saveData.MaxLevel)
+        {
+            _saveData.MaxLevel = currentLevel;
+        }
+
+        // 플레이 횟수 증가
+        _saveData.TotalGamesPlayed++;
+
+        // 마지막 플레이 날짜 갱신 (ISO 8601)
+        _saveData.LastPlayDate = DateTime.Now.ToString("o");
+
+        // PlayerPrefs에 저장
+        BrickGameSaveData.Save(_saveData);
+
+        GameLogger.Info("BrickGameManager",
+            $"진행 저장 완료 (Score: {currentScore}, HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel}, Games: {_saveData.TotalGamesPlayed})");
+
+        return isNewRecord;
+    }
+
+    /// <summary>
+    /// PlayerPrefs에서 저장된 진행 데이터를 로드
+    /// </summary>
+    public void LoadProgress()
+    {
+        _saveData = BrickGameSaveData.Load();
+        GameLogger.Info("BrickGameManager",
+            $"진행 로드 완료 (HighScore: {_saveData.HighScore}, MaxLevel: {_saveData.MaxLevel}, Games: {_saveData.TotalGamesPlayed})");
     }
     #endregion
 
