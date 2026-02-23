@@ -220,3 +220,6 @@ plastic.wktree
 !.gitattributes
 nul
 replay_pid38220.log
+
+# Auto Claude data directory
+.auto-claude/

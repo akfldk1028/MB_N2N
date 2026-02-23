@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop\\.auto-claude\\specs\\015-territory-component-loop/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop\\.auto-claude\\specs\\015-territory-component-loop/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude\\worktrees\\tasks\\015-territory-component-loop\\.auto-claude\\specs\\015-territory-component-loop/**)",
+      "Read(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Write(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Edit(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Glob(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Grep(C:\\DK\\MB\\MB_N2N\\.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)"
+    ]
+  }
+}
