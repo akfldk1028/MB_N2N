@@ -99,6 +99,7 @@ public class BrickGameManager
     private PlankManager _plankManager;
     private BallManager _ballManager;
     private BrickManager _brickManager;
+    private PowerUpDropManager _powerUpDropManager;
 
     /// <summary>
     /// 패들(Plank) 관리 매니저 접근자
@@ -117,6 +118,12 @@ public class BrickGameManager
     /// Managers.Game.BrickGame.Brick 형태로 사용
     /// </summary>
     public BrickManager Brick => _brickManager;
+
+    /// <summary>
+    /// 파워업 드롭 관리 매니저 접근자
+    /// Managers.Game.BrickGame.PowerUpDrop 형태로 사용
+    /// </summary>
+    public PowerUpDropManager PowerUpDrop => _powerUpDropManager;
     #endregion
     
     #region 이벤트
@@ -140,6 +147,7 @@ public class BrickGameManager
         _plankManager = new PlankManager();
         _ballManager = new BallManager();
         _brickManager = new BrickManager();
+        _powerUpDropManager = new PowerUpDropManager();
 
         // Sub-Manager 이벤트 구독
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
@@ -184,6 +192,7 @@ public class BrickGameManager
         _plankManager.Initialize(plank, mainCamera);
         _ballManager.Initialize();
         _brickManager.Initialize();
+        _powerUpDropManager.Initialize();
 
         GameLogger.Success("BrickGameManager", "초기화 완료 (의존성 주입됨)");
     }

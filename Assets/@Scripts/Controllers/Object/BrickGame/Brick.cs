@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using MB.Infrastructure.Messages;
 using Unity.Assets.Scripts.Objects;
 
 namespace Unity.Assets.Scripts.Objects
@@ -12,23 +13,14 @@ namespace Unity.Assets.Scripts.Objects
         private const float bottomBoundary = -2.3f;
         private bool isGameOverTriggered = false; // 게임 오버 중복 호출 방지
 
-        // 특수 벽돌 타입 (기본: Normal)
-        protected BrickType brickType = BrickType.Normal;
-        private bool isItemBrick = false; // Item 벽돌 파워업 드롭 플래그
-
         // BricksWave 로직 통합
-        protected int wave = 1;
-        protected int originalWave = 1; // 원래 wave 값 저장 (점수 계산용)
-        protected TextMeshPro waveText;
+        private int wave = 1;
+        private int originalWave = 1; // 원래 wave 값 저장 (점수 계산용)
+        private TextMeshPro waveText;
         private AudioSource brickHitSound;
-        [SerializeField] protected Renderer brickRenderer; // Reference to the brick's renderer for color changes
+        [SerializeField] private Renderer brickRenderer; // Reference to the brick's renderer for color changes
 
         #region Public Properties (총알 시스템용)
-        /// <summary>
-        /// 벽돌 타입 (Normal, Explosion, Steel, Item, Gold)
-        /// </summary>
-        public BrickType Type => brickType;
-
         /// <summary>
         /// 벽돌 소유자 Client ID (NetworkObject에서 가져옴)
         /// </summary>
@@ -47,7 +39,7 @@ namespace Unity.Assets.Scripts.Objects
         public int Health => wave;
         #endregion
         
-        protected virtual void Start()
+        private void Start()
         {
 
 
@@ -156,7 +148,7 @@ namespace Unity.Assets.Scripts.Objects
         }
         
         // 공과 충돌 시 처리
-        protected virtual void HandleBallCollision(Collision2D collision)
+        private void HandleBallCollision(Collision2D collision)
         {
             // ✅ 멀티플레이어: 소유권 확인
             if (!CheckOwnership(collision.gameObject))
@@ -207,11 +199,8 @@ namespace Unity.Assets.Scripts.Objects
         /// 플레이어별 점수 추가
         /// ✅ MultiplayerUtil 사용
         /// </summary>
-        protected virtual void AddScoreToPlayer(int score)
+        private void AddScoreToPlayer(int score)
         {
-            // ✅ Gold 벽돌: 점수 5배 보정
-            int finalScore = (brickType == BrickType.Gold) ? score * 5 : score;
-
             if (MultiplayerUtil.IsMultiplayer())
             {
                 // 멀티플레이어 모드: 해당 플레이어에게 점수 추가
@@ -220,14 +209,14 @@ namespace Unity.Assets.Scripts.Objects
                 {
                     ulong ownerClientId = brickNetObj.OwnerClientId;
                     var playerGame = Managers.Game?.GetPlayerGame(ownerClientId);
-                    playerGame?.AddScore(finalScore);
-                    GameLogger.Info("Brick", $"[Player {ownerClientId}] 점수 +{finalScore}{(brickType == BrickType.Gold ? " (Gold 5x)" : "")}");
+                    playerGame?.AddScore(score);
+                    GameLogger.Info("Brick", $"[Player {ownerClientId}] 점수 +{score}");
                 }
             }
             else
             {
                 // 싱글플레이어 모드
-                Managers.Game?.BrickGame?.AddScore(finalScore);
+                Managers.Game?.BrickGame?.AddScore(score);
             }
         }
 
@@ -260,41 +249,10 @@ namespace Unity.Assets.Scripts.Objects
         }
         #endregion
 
-        #region Special Brick Type Initialization
-        /// <summary>
-        /// 스폰 시 벽돌 타입 초기화 (BrickManager/ObjectPlacement에서 호출)
-        /// Gold: wave=1, originalWave=1 (점수 5배 보정)
-        /// Item: 파워업 드롭 플래그 설정
-        /// </summary>
-        public virtual void InitializeBrickType(BrickType type)
-        {
-            brickType = type;
-
-            switch (type)
-            {
-                case BrickType.Gold:
-                    // Gold 벽돌: HP=1, 점수 5배
-                    wave = 1;
-                    originalWave = 1;
-                    if (waveText != null)
-                        waveText.text = wave.ToString();
-                    break;
-
-                case BrickType.Item:
-                    // Item 벽돌: 파괴 시 Star 파워업 드롭
-                    isItemBrick = true;
-                    break;
-            }
-
-            // 타입에 맞는 색상 업데이트
-            ColorBrick();
-        }
-        #endregion
-
         /// <summary>
         /// 벽돌이 파괴될 때 호출되는 로직
         /// </summary>
-        protected virtual void HandleBrickDestruction()
+        private void HandleBrickDestruction()
         {
             // 업적 및 점수 추적
             int bricksDestroyed = PlayerPrefs.GetInt("numberOfBricksDestroyed", 0) + 1;
@@ -305,57 +263,10 @@ namespace Unity.Assets.Scripts.Objects
             // CheckAndUnlockAchievement(bricksDestroyed, 1000, "destroy1000bricks", "destroy 1000 bricks");
             // CheckAndUnlockAchievement(bricksDestroyed, 10000, "destroy10000bricks", "destroy 10000 bricks");
 
-            // ✅ Item 벽돌: 파괴 시 Star 파워업 드롭
-            if (isItemBrick)
-            {
-                SpawnStarAtPosition();
-            }
-        }
-
-        /// <summary>
-        /// Item 벽돌 파괴 시 Star 파워업 아이템 스폰
-        /// Server Authority: 서버에서만 스폰
-        /// </summary>
-        private void SpawnStarAtPosition()
-        {
-            // 서버 권한 확인 (멀티플레이어에서는 서버만 스폰)
-            var netObj = GetComponent<Unity.Netcode.NetworkObject>();
-            bool isNetworkMode = netObj != null && netObj.IsSpawned;
-            if (isNetworkMode && Unity.Netcode.NetworkManager.Singleton != null &&
-                !Unity.Netcode.NetworkManager.Singleton.IsServer)
-            {
-                return; // 클라이언트에서는 스폰하지 않음
-            }
-
-            // Star 프리팹 로드
-            GameObject starPrefab = Managers.Resource.Load<GameObject>("star");
-            if (starPrefab == null)
-            {
-                GameLogger.Warning("Brick", "Star 프리팹을 로드할 수 없습니다 (Item 벽돌 파워업 드롭 실패)");
-                return;
-            }
-
-            // Star 스폰 (벽돌 위치에)
-            GameObject star = Object.Instantiate(starPrefab, transform.position, Quaternion.identity);
-
-            // ✅ 멀티플레이어: NetworkObject 스폰 처리
-            if (isNetworkMode)
-            {
-                var starNetObj = star.GetComponent<Unity.Netcode.NetworkObject>();
-                if (starNetObj != null)
-                {
-                    starNetObj.SpawnWithOwnership(netObj.OwnerClientId);
-                    GameLogger.Info("Brick", $"[Item 벽돌] Star 파워업 스폰 완료 (Owner: {netObj.OwnerClientId})");
-                }
-                else
-                {
-                    GameLogger.Warning("Brick", "Star 프리팹에 NetworkObject 컴포넌트가 없습니다");
-                }
-            }
-            else
-            {
-                GameLogger.Info("Brick", "[Item 벽돌] Star 파워업 스폰 완료 (싱글플레이어)");
-            }
+            // ✅ 벽돌 파괴 이벤트 발행 (위치 + 소유자 정보 포함)
+            // PowerUpDropManager 등이 구독하여 아이템 드롭 등을 처리
+            Managers.PublishAction(ActionId.BrickGame_BrickDestroyed,
+                new BrickGameBrickDestroyedPayload(originalWave, transform.position, OwnerClientId));
         }
 
         /// <summary>
@@ -363,7 +274,7 @@ namespace Unity.Assets.Scripts.Objects
         /// ✅ NetworkObject는 Despawn() 먼저 호출해야 클라이언트 동기화 오류 방지
         /// ✅ SERVER에서만 Despawn 가능!
         /// </summary>
-        protected void DestroyBrickSafely()
+        private void DestroyBrickSafely()
         {
             var netObj = GetComponent<Unity.Netcode.NetworkObject>();
             if (netObj != null && netObj.IsSpawned)
@@ -405,26 +316,10 @@ namespace Unity.Assets.Scripts.Objects
         /// <summary>
         /// 남은 체력(wave)에 따라 벽돌 색상 조정
         /// </summary>
-        // 특수 벽돌 색상 상수
-        private static readonly Color GoldBrickColor = new Color(1f, 0.84f, 0f);        // 금색
-        private static readonly Color ItemBrickColor = new Color(0.6f, 0.2f, 0.9f);     // 무지개/보라색
-
-        protected virtual void ColorBrick()
+        private void ColorBrick()
         {
             if (brickRenderer == null) return;
-
-            // ✅ 특수 벽돌 타입 색상 우선 적용
-            switch (brickType)
-            {
-                case BrickType.Gold:
-                    brickRenderer.material.color = GoldBrickColor;
-                    return;
-                case BrickType.Item:
-                    brickRenderer.material.color = ItemBrickColor;
-                    return;
-            }
-
-            // 기본 벽돌 (Normal): 남은 체력(wave)에 따라 색상 전환
+            Debug.Log($"[{gameObject.name}] ColorBrick: brickRenderer = {brickRenderer}");
             if (wave <= 30)
             {
                 brickRenderer.material.color = new Color(1, 1 - (wave / 30f), 0); // 노란색에서 빨간색으로 전환

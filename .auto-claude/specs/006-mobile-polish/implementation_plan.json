@@ -1,34 +1,320 @@
 {
-  "status": "queue",
-  "planStatus": "queue",
-  "xstateState": "backlog",
-  "executionPhase": "backlog",
+  "feature": "Mobile Polish - SafeArea, Back Button, Haptics, Build Settings",
+  "workflow_type": "feature",
+  "workflow_rationale": "This is a feature task adding mobile-specific capabilities (SafeArea, back button handling, haptic feedback) across UI and game logic modules, plus Android build configuration changes. It follows service dependency: build settings first, then UI infrastructure (SafeArea), then input handling (back button), then game feedback (haptics), then integration verification.",
+  "status": "in_progress",
+  "planStatus": "planned",
+  "xstateState": "coding",
+  "executionPhase": "ready",
   "taskType": "default",
   "priority": 6,
   "complexity": "standard",
   "created_at": "2026-02-09T12:00:00Z",
-  "updated_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-19T01:30:00.000000+00:00",
   "phases": [
     {
-      "name": "safe-area",
-      "description": "Create SafeAreaHandler component for notch devices"
+      "id": "phase-1-build-settings",
+      "name": "Android Build Settings & Orientation",
+      "type": "implementation",
+      "description": "Configure ProjectSettings.asset for Android build: package name, API levels, portrait orientation lock, safe area rendering.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Update ProjectSettings.asset: Set package name to com.ac247.brickgame, Android min API 26, target API 34, portrait orientation lock (defaultScreenOrientation: 1), disable autorotation to landscape, disable androidRenderOutsideSafeArea",
+          "service": "unity",
+          "files_to_modify": [
+            "ProjectSettings/ProjectSettings.asset"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -E 'defaultScreenOrientation|applicationIdentifier|AndroidMinSdkVersion|AndroidTargetSdkVersion|androidRenderOutsideSafeArea' ProjectSettings/ProjectSettings.asset",
+            "expected": "defaultScreenOrientation: 1, Android: com.ac247.brickgame, AndroidMinSdkVersion: 26, AndroidTargetSdkVersion: 34, androidRenderOutsideSafeArea: 0"
+          },
+          "status": "completed",
+          "notes": "All 9 ProjectSettings.asset changes applied and verified: defaultScreenOrientation: 1 (Portrait), package name: com.ac247.brickgame, AndroidMinSdkVersion: 26, AndroidTargetSdkVersion: 34, disabled landscape autorotation, disabled useOSAutorotation, disabled androidRenderOutsideSafeArea. Committed as 1f96ae4.",
+          "updated_at": "2026-02-18T16:22:50.991540+00:00"
+        }
+      ]
     },
     {
-      "name": "orientation-settings",
-      "description": "Lock to portrait, set Android build settings"
+      "id": "phase-2-safe-area",
+      "name": "Safe Area Handler",
+      "type": "implementation",
+      "description": "Create SafeAreaHandler MonoBehaviour component that adjusts a RectTransform to fit within the device safe area (notch/punch-hole avoidance).",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create SafeAreaHandler.cs MonoBehaviour component. Attach to a RectTransform under Canvas. On Awake/orientation change, read Screen.safeArea and adjust RectTransform anchors to keep all child UI within the safe area. Follow existing UI component patterns.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/SafeAreaHandler.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/UI_Base.cs",
+            "Assets/@Scripts/Managers/Core/UIManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'Screen.safeArea' Assets/@Scripts/UI/SafeAreaHandler.cs",
+            "expected": "At least 1 occurrence of Screen.safeArea"
+          },
+          "status": "completed",
+          "notes": "Created SafeAreaHandler.cs MonoBehaviour component with: [RequireComponent(typeof(RectTransform))], Canvas parent caching, Screen.safeArea reading on Awake, anchor normalization (safeArea pixel coords / screen dimensions), Update() change detection via lastSafeArea/lastScreenSize/lastOrientation caching, Mathf.Clamp01 safety on anchor values. Verification passed: 4 occurrences of Screen.safeArea. Committed as 81d0292.",
+          "updated_at": "2026-02-18T16:25:08.149507+00:00"
+        }
+      ]
     },
     {
-      "name": "back-button",
-      "description": "Handle Android back button in each scene"
+      "id": "phase-3-haptic-manager",
+      "name": "Haptic Feedback System",
+      "type": "implementation",
+      "description": "Create HapticManager utility and integrate haptic feedback on brick destruction. Respect Settings_Vibration PlayerPrefs toggle from 004-settings-screen.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create HapticManager.cs static utility class. Methods: Vibrate() using Handheld.Vibrate() wrapped in #if UNITY_ANDROID || UNITY_IOS, IsEnabled property reading PlayerPrefs 'Settings_Vibration' key (default: enabled), SetEnabled(bool). Follow SoundManager PlayerPrefs pattern.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Utils/HapticManager.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Core/SoundManager.cs",
+            "Assets/@Scripts/Network/Common/ClientPrefs.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -E 'Handheld.Vibrate|Settings_Vibration|UNITY_ANDROID' Assets/@Scripts/Utils/HapticManager.cs",
+            "expected": "Contains Handheld.Vibrate, Settings_Vibration, UNITY_ANDROID"
+          },
+          "status": "pending",
+          "notes": "HapticManager is a static class (POCO pattern, not MonoBehaviour). PlayerPrefs key: 'Settings_Vibration' (int, 1=on 0=off, default 1). For short vibrations on Android, use AndroidJavaObject to call android.os.Vibrator with a short duration (50ms). Fallback to Handheld.Vibrate() if native access fails. On iOS, use Handheld.Vibrate(). Wrap all platform calls in #if UNITY_ANDROID / #if UNITY_IOS."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Integrate haptic feedback into Brick.cs: Call HapticManager.Vibrate() when a brick is destroyed, inside the 'if (wave <= 0)' block in HandleBallCollision() and in TakeDamage().",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Utils/HapticManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep 'HapticManager' Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs",
+            "expected": "HapticManager.Vibrate() call found in Brick.cs"
+          },
+          "status": "pending",
+          "notes": "Add HapticManager.Vibrate() in TWO places: 1) HandleBallCollision() inside 'if (wave <= 0)' block just before AddScoreToPlayer, 2) TakeDamage() inside 'if (wave <= 0)' block just before AddScoreToPlayer. Only vibrate on destruction, not on every hit."
+        }
+      ]
     },
     {
-      "name": "haptics",
-      "description": "Add vibration feedback on brick destruction"
+      "id": "phase-4-back-button",
+      "name": "Android Back Button Handling",
+      "type": "implementation",
+      "description": "Handle Android back button (KeyCode.Escape) in each scene: StartUpScene shows exit confirmation, GameScene triggers pause, popup open → close popup.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add Android back button handling to UI_StartUpScene.cs: Add Update() method checking Input.GetKeyDown(KeyCode.Escape). If popup open → close top popup. Otherwise → show exit confirmation (native Android dialog or toggle a confirmation panel, then Application.Quit on confirm).",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/Popup/UI_Popup.cs",
+            "Assets/@Scripts/UI/Popup/UI_HeroInfoPopup.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -E 'KeyCode.Escape|Application.Quit' 'Assets/@Scripts/UI/Scene/UI_ StartUpScene.cs'",
+            "expected": "KeyCode.Escape and Application.Quit found"
+          },
+          "status": "pending",
+          "notes": "Implementation: Add void Update() { if (Input.GetKeyDown(KeyCode.Escape)) { HandleBackButton(); } }. HandleBackButton: 1) Check Managers.UI.GetPopupCount() > 0 → Managers.UI.ClosePopupUI() and return, 2) Otherwise show exit confirmation. For exit confirmation, simplest approach: use a bool flag _showExitConfirm, toggle visibility of a confirmation panel (Bind an exit confirm panel with Yes/No buttons), or use a simple approach where pressing back twice within 2 seconds quits. The existing ExitButton already calls Application.Quit(), so the exit logic is proven."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Add Android back button handling to GameScene.cs: In existing Update() method, add KeyCode.Escape check at the top. If popup open → close it. If game playing → call PauseGame(). If game paused → ResumeGame().",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Scenes/GameScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -E 'KeyCode.Escape|PauseGame' Assets/@Scripts/Scenes/GameScene.cs",
+            "expected": "KeyCode.Escape and PauseGame found in GameScene.cs"
+          },
+          "status": "pending",
+          "notes": "Add at TOP of existing Update() method, before the focus check: if (Input.GetKeyDown(KeyCode.Escape)) { HandleBackButton(); return; }. HandleBackButton logic: 1) if (Managers.UI.GetPopupCount() > 0) { Managers.UI.ClosePopupUI(); return; }, 2) var brickGame = Managers.Game?.BrickGame; if (brickGame == null) return; 3) if (brickGame.Phase == GamePhase.Playing) { brickGame.PauseGame(); /* optionally show UI_PausePopup if it exists */ }, 4) else if (brickGame.Phase == GamePhase.Paused) { brickGame.ResumeGame(); }. BrickGameManager.PauseGame() and ResumeGame() already exist."
+        }
+      ]
     },
     {
-      "name": "validate",
-      "description": "Compile and test on device"
+      "id": "phase-5-integration",
+      "name": "Integration & Compile Verification",
+      "type": "integration",
+      "description": "Verify all components compile together, generate .meta files, check no missing references.",
+      "depends_on": [
+        "phase-1-build-settings",
+        "phase-2-safe-area",
+        "phase-3-haptic-manager",
+        "phase-4-back-button"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Generate .meta files for new .cs files (SafeAreaHandler.cs.meta, HapticManager.cs.meta). Verify all cross-references: HapticManager used in Brick.cs, back button code in scene scripts. Final review of all changes.",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/SafeAreaHandler.cs.meta",
+            "Assets/@Scripts/Utils/HapticManager.cs.meta"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/UI_Base.cs.meta",
+            "Assets/@Scripts/Utils/GameLogger.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "find Assets/@Scripts -name 'SafeAreaHandler*' -o -name 'HapticManager*' | sort && echo '---' && grep -rn 'HapticManager' Assets/@Scripts/Controllers/ && echo '---' && grep -rn 'KeyCode.Escape' Assets/@Scripts/",
+            "expected": "All files with .meta found, HapticManager referenced in Brick.cs, KeyCode.Escape in scene files"
+          },
+          "status": "pending",
+          "notes": "Unity .meta files need a unique GUID. Format: fileFormatVersion: 2, guid: <32char hex>, MonoImporter with serializedVersion 2. Generate random GUIDs for each .meta file. Also verify: 1) No namespace conflicts, 2) No circular dependencies, 3) All #if platform directives properly closed with #endif, 4) using statements are correct."
+        }
+      ]
     }
   ],
-  "subtasks": []
+  "subtasks": [],
+  "summary": {
+    "total_phases": 5,
+    "total_subtasks": 6,
+    "services_involved": [
+      "unity"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 4,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-1-build-settings",
+            "phase-2-safe-area",
+            "phase-3-haptic-manager",
+            "phase-4-back-button"
+          ],
+          "reason": "All 4 implementation phases have no dependencies on each other. They modify different files: phase-1=ProjectSettings.asset, phase-2=new SafeAreaHandler.cs, phase-3=new HapticManager.cs+Brick.cs, phase-4=UI_StartUpScene.cs+GameScene.cs. No file conflicts."
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Single worker recommended - all phases are small and sequential execution is simpler for a single-service Unity project"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 006 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All new C# files compile without errors",
+      "SafeAreaHandler component adjusts RectTransform to Screen.safeArea",
+      "Portrait orientation locked in ProjectSettings",
+      "Android back button triggers pause in GameScene and exit confirm in StartUpScene",
+      "Haptic feedback fires on brick destruction (when enabled)",
+      "Package name = com.ac247.brickgame",
+      "Android min API 26, target API 34",
+      "No existing functionality broken"
+    ],
+    "verification_steps": [
+      {
+        "name": "Compile Check",
+        "command": "grep -rn 'class SafeAreaHandler' Assets/@Scripts/ && grep -rn 'class HapticManager' Assets/@Scripts/ && grep -rn 'HapticManager.Vibrate' Assets/@Scripts/Controllers/Object/BrickGame/Brick.cs",
+        "expected_outcome": "All classes found and referenced",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "ProjectSettings Verification",
+        "command": "grep 'com.ac247.brickgame' ProjectSettings/ProjectSettings.asset && grep 'AndroidMinSdkVersion: 26' ProjectSettings/ProjectSettings.asset",
+        "expected_outcome": "Package name and API level correctly set",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Platform Guards Check",
+        "command": "grep -c 'UNITY_ANDROID' Assets/@Scripts/Utils/HapticManager.cs",
+        "expected_outcome": "Platform-specific guards present",
+        "type": "test",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk - creates new utility classes and modifies existing game logic (Brick.cs) and scene scripts. Changes are additive. ProjectSettings changes are straightforward YAML edits."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "manual_verification": {
+      "required": true,
+      "checks": [
+        "Open project in Unity Editor - verify 0 compile errors",
+        "Check ProjectSettings > Player > Android > Package Name = com.ac247.brickgame",
+        "Check ProjectSettings > Player > Resolution > Default Orientation = Portrait",
+        "Play StartUpScene, press Escape - exit confirmation appears",
+        "Play GameScene, press Escape - game pauses",
+        "Play GameScene, destroy a brick - haptic triggers (test on device)",
+        "Build APK for Android - build succeeds"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2026-02-18T16:25:08.149507+00:00"
 }

@@ -1,0 +1,17 @@
+{
+  "project_dir": "C:\\DK\\MB\\MB_N2N",
+  "running": false,
+  "started_at": "2026-02-18T16:14:16.753034+00:00",
+  "config": {
+    "max_concurrent_tasks": 1,
+    "headless_mode": true
+  },
+  "running_tasks": {},
+  "queued_tasks": [],
+  "stats": {
+    "running": 0,
+    "queued": 0,
+    "completed": 0
+  },
+  "timestamp": "2026-02-20T03:06:47.086658+00:00"
+}

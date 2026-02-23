@@ -1,30 +1,255 @@
 {
-  "status": "queue",
-  "planStatus": "queue",
-  "xstateState": "backlog",
+  "feature": "BrickGame Pause System",
+  "workflow_type": "feature",
+  "workflow_rationale": "Adding new pause functionality: enhancing existing BrickGameManager pause/resume with Time.timeScale, creating new UI_PausePopup, and adding trigger integrations. Single-service Unity project but multiple logical layers (game logic, UI popup, scene triggers).",
+  "status": "in_progress",
+  "planStatus": "planned",
+  "xstateState": "coding",
   "executionPhase": "backlog",
   "taskType": "default",
   "priority": 7,
   "complexity": "standard",
   "created_at": "2026-02-09T12:00:00Z",
-  "updated_at": "2026-02-09T12:00:00Z",
+  "updated_at": "2026-02-19T01:30:00.000000+00:00",
   "phases": [
     {
-      "name": "game-pause-logic",
-      "description": "Add Pause/Resume to BrickGameManager, GamePhase.Paused"
+      "id": "phase-1-pause-logic",
+      "name": "Game Pause Logic Enhancement",
+      "type": "implementation",
+      "description": "Enhance BrickGameManager.PauseGame()/ResumeGame() with Time.timeScale control, IsPaused property, and previous-phase tracking. GamePhase.Paused already exists - no enum changes needed.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Enhance BrickGameManager with Time.timeScale pause/resume, IsPaused property, and _previousPhase tracking. Modify PauseGame() to set Time.timeScale=0, save previous phase, and publish ActionBus event. Modify ResumeGame() to restore Time.timeScale=1, restore previous phase, and publish ActionBus event. Add IsPaused property. Add guard against double-pause.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameState.cs",
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'Time.timeScale' Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs",
+            "expected": "At least 2 occurrences (PauseGame and ResumeGame)"
+          },
+          "status": "completed",
+          "notes": "Implemented all requirements: _previousPhase tracking, IsPaused property, enhanced PauseGame() with Time.timeScale=0 + double-pause guard + ActionBus event, enhanced ResumeGame() with Time.timeScale=1 + phase restore + ActionBus event, safety nets in GameOver() and RestartGame(). Verification: 4 Time.timeScale assignments found (exceeds minimum 2). Committed as 8d41d33.",
+          "updated_at": "2026-02-18T16:23:02.449453+00:00"
+        }
+      ]
     },
     {
-      "name": "pause-popup",
-      "description": "Create UI_PausePopup with continue/restart/quit/settings"
+      "id": "phase-2-pause-popup",
+      "name": "UI_PausePopup Creation",
+      "type": "implementation",
+      "description": "Create UI_PausePopup.cs following the UI_HeroInfoPopup pattern: enum-based binding, buttons for Continue/Restart/Quit/Settings, event handlers.",
+      "depends_on": [
+        "phase-1-pause-logic"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create UI_PausePopup.cs inheriting UI_Popup. Define enum Buttons (ContinueButton, RestartButton, QuitButton, SettingsButton) and enum Texts (TitleText). In Init(), bind enums and attach click handlers. ContinueButton calls Managers.Game.BrickGame.ResumeGame() then ClosePopupUI(this). RestartButton calls ResumeGame() first (to restore timeScale), then RestartGame(), then ClosePopupUI. QuitButton calls Time.timeScale=1 then Managers.Scene.LoadScene(Define.EScene.TitleScene). SettingsButton is placeholder (logs warning that 004 not implemented yet, or calls ShowPopupUI<UI_SettingsPopup>() if class exists).",
+          "service": "unity",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/UI/Popup/UI_PausePopup.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/UI/Popup/UI_Popup.cs",
+            "Assets/@Scripts/UI/Popup/UI_HeroInfoPopup.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'class UI_PausePopup' Assets/@Scripts/UI/Popup/UI_PausePopup.cs",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Follow UI_HeroInfoPopup pattern exactly: enum Buttons, BindButtons, BindEvent with PointerEventData. Must call Time.timeScale=1 before any scene transition to prevent frozen state. Settings button should gracefully handle missing UI_SettingsPopup."
+        }
+      ]
     },
     {
-      "name": "triggers",
-      "description": "Add pause button to game UI, handle background pause"
+      "id": "phase-3-triggers",
+      "name": "Pause Triggers (Button + Background)",
+      "type": "implementation",
+      "description": "Add pause button to UI_BrickGameScene and add OnApplicationPause handler in GameScene for automatic background pause.",
+      "depends_on": [
+        "phase-2-pause-popup"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add PauseButton to UI_BrickGameScene: Add PauseButton to the Buttons enum. In Init(), bind the button and attach a click handler that calls Managers.Game.BrickGame.PauseGame() then Managers.UI.ShowPopupUI<UI_PausePopup>(). Only trigger pause if game is active (Phase == Playing).",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/UI/Scene/UI_BrickGameScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/UI/Popup/UI_HeroInfoPopup.cs",
+            "Assets/@Scripts/UI/Scene/UI_BrickGameScene.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'PauseButton' Assets/@Scripts/UI/Scene/UI_BrickGameScene.cs",
+            "expected": "At least 2 (enum entry + binding usage)"
+          },
+          "status": "pending",
+          "notes": "Pause button should be in the top area of the game screen. Must guard against pausing when not in Playing state. The UI prefab for the button must be created separately in Unity Editor (not our responsibility - just the script binding)."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add OnApplicationPause(bool pauseStatus) to GameScene.cs for automatic pause when app goes to background. When pauseStatus=true and game is active (Playing), call Managers.Game.BrickGame.PauseGame() and show UI_PausePopup. Guard against null BrickGame and non-Playing states.",
+          "service": "unity",
+          "files_to_modify": [
+            "Assets/@Scripts/Scenes/GameScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Scenes/GameScene.cs",
+            "Assets/@Scripts/Scenes/BaseScene.cs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'OnApplicationPause' Assets/@Scripts/Scenes/GameScene.cs",
+            "expected": "At least 1"
+          },
+          "status": "pending",
+          "notes": "OnApplicationPause is a Unity lifecycle callback on MonoBehaviour. Also add OnApplicationFocus(false) as an alternative for some platforms. Must check that game is in Playing phase before auto-pausing. Must also ensure Time.timeScale is restored to 1 in Clear() method as safety net."
+        }
+      ]
     },
     {
-      "name": "validate",
-      "description": "Compile and test pause flow"
+      "id": "phase-4-integration",
+      "name": "Integration and Validation",
+      "type": "integration",
+      "description": "Verify all pause system components work together. Ensure compile-time correctness and safety nets for Time.timeScale restoration.",
+      "depends_on": [
+        "phase-3-triggers"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Final integration review: (1) Verify no compile errors by checking all files reference correct types. (2) Ensure Time.timeScale=1 is restored in GameScene.Clear() as a safety net. (3) Ensure RestartGame() and GameOver() in BrickGameManager also restore Time.timeScale=1. (4) Verify ActionBus events BrickGame_GameStateChanged are published for Paused phase. (5) Review all files for consistency with CLAUDE.md architecture rules.",
+          "all_services": true,
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs",
+            "Assets/@Scripts/Scenes/GameScene.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review all modified files for: (1) Time.timeScale properly set/restored in all paths, (2) ActionBus events published for pause/resume, (3) Guard conditions prevent double-pause or pausing in wrong state, (4) Scene transitions restore Time.timeScale, (5) Code follows existing patterns in CLAUDE.md"
+          },
+          "status": "pending",
+          "notes": "This subtask ensures robustness. Key risk: Time.timeScale stuck at 0 after scene transition would freeze the entire game."
+        }
+      ]
     }
   ],
-  "subtasks": []
+  "summary": {
+    "total_phases": 4,
+    "total_subtasks": 5,
+    "services_involved": [
+      "unity"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution (single service, linear dependencies)"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 007 --parallel 1",
+    "key_risks": [
+      "Time.timeScale=0 stuck after scene transition (mitigated by safety net in GameScene.Clear())",
+      "UI_PausePopup prefab must be created in Unity Editor (script only - prefab is designer responsibility)",
+      "UI_SettingsPopup (spec 004) does not exist yet - Settings button must handle gracefully"
+    ]
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All .cs files compile with 0 errors",
+      "PauseGame() sets Time.timeScale=0 and GamePhase.Paused",
+      "ResumeGame() restores Time.timeScale=1 and previous GamePhase",
+      "UI_PausePopup has Continue/Restart/Quit/Settings buttons",
+      "UI_BrickGameScene has PauseButton binding",
+      "GameScene handles OnApplicationPause for background auto-pause",
+      "Time.timeScale is always restored to 1 on scene exit (safety net)"
+    ],
+    "verification_steps": [
+      {
+        "name": "Compile Check",
+        "command": "grep -rn 'class UI_PausePopup' Assets/@Scripts/UI/Popup/UI_PausePopup.cs && grep -c 'Time.timeScale' Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs && grep -c 'OnApplicationPause' Assets/@Scripts/Scenes/GameScene.cs && grep -c 'PauseButton' Assets/@Scripts/UI/Scene/UI_BrickGameScene.cs",
+        "expected_outcome": "All grep commands return matches",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Manual Verification",
+        "command": "echo 'Manual: Open Unity Editor, enter play mode, verify pause button works'",
+        "expected_outcome": "Game pauses/resumes correctly in Unity Editor",
+        "type": "test",
+        "required": false,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk: Time.timeScale affects entire Unity engine. Must ensure it's always properly restored. No automated test framework available for Unity project."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null,
+      "notes": "Unity project - no CLI test runner available"
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "compile_check": {
+      "required": true,
+      "method": "Verify all .cs files have valid syntax and correct type references by searching for expected code patterns",
+      "checks": [
+        "UI_PausePopup class exists and inherits UI_Popup",
+        "BrickGameManager has Time.timeScale in PauseGame/ResumeGame",
+        "GameScene has OnApplicationPause handler",
+        "UI_BrickGameScene has PauseButton enum entry"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2026-02-18T16:23:02.449453+00:00"
 }
