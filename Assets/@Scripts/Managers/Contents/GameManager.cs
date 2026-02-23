@@ -44,6 +44,9 @@ public class GameManager
 	// ✅ 사운드 바인더 (BrickGame 이벤트 → SFX/BGM 자동 재생)
 	private BrickGameSoundBinder _soundBinder;
 
+	// ✅ VFX 바인더 (BrickGame 이벤트 → 파티클 이펙트 자동 재생)
+	private BrickGameVFXBinder _vfxBinder;
+
 	public GameManager()
 	{
 		Debug.Log("<color=yellow>[GameManager]</color> 생성됨 (GameRuleManager, WinConditionManager 포함)");
@@ -103,6 +106,13 @@ public class GameManager
 			_soundBinder.Initialize();
 		}
 
+		// VFX 바인더 초기화 (이벤트 → 파티클 이펙트 자동 재생)
+		if (_vfxBinder == null)
+		{
+			_vfxBinder = new BrickGameVFXBinder();
+			_vfxBinder.Initialize();
+		}
+
 		GameLogger.Success("GameManager", "BrickGame 초기화 완료 및 Update 구독됨!");
 	}
 
@@ -116,6 +126,9 @@ public class GameManager
 
 		_soundBinder?.Dispose();
 		_soundBinder = null;
+
+		_vfxBinder?.Dispose();
+		_vfxBinder = null;
 
 		GameLogger.Info("GameManager", "BrickGame 정리 완료 (Update 구독 해제)");
 	}

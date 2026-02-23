@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Netcode;
+using MB.Infrastructure.Messages;
 using static Define;
 
 namespace Unity.Assets.Scripts.Objects
@@ -702,13 +703,18 @@ namespace Unity.Assets.Scripts.Objects
                 reflectDir.x * Mathf.Cos(randomAngle) - reflectDir.y * Mathf.Sin(randomAngle),
                 reflectDir.x * Mathf.Sin(randomAngle) + reflectDir.y * Mathf.Cos(randomAngle)
             );
-            
+
             // 벽돌에 데미지 적용 (필요시)
             Brick brick = collision.gameObject.GetComponent<Brick>();
             if (brick != null)
             {
                 // brick.OnHit();
             }
+
+            // ✅ VFX 파티클 이벤트 발행 (벽돌 바운스 - 의미있는 충돌만)
+            Vector2 contactPoint = collision.contacts[0].point;
+            Managers.PublishAction(ActionId.BrickGame_BallBounce,
+                new BallBounceVFXPayload(new Vector3(contactPoint.x, contactPoint.y, 0f)));
         }
         
         // 새 속도 적용 - 정규화된 방향에 제한된 속도 적용
@@ -749,6 +755,10 @@ namespace Unity.Assets.Scripts.Objects
 
         // 새 속도 적용
         rb.linearVelocity = bounceDirection.normalized * bounceSpeed;
+
+        // ✅ VFX 파티클 이벤트 발행 (플랭크 바운스 - 의미있는 충돌)
+        Managers.PublishAction(ActionId.BrickGame_BallBounce,
+            new BallBounceVFXPayload(new Vector3(contactPoint.x, contactPoint.y, 0f)));
 
         #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"[PhysicsBall] Plank collision. Difference: {difference:F2}, Angle: {angle:F1}, Speed: {bounceSpeed:F1}");

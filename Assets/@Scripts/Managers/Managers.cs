@@ -62,6 +62,7 @@ public class Managers : MonoBehaviour
     private GameModeService _gameMode = new GameModeService();
     private CameraManager _camera = new CameraManager();
     private SoundManager _sound = new SoundManager();
+    private VFXManager _vfx = new VFXManager();
 
     public static GameManager Game { get { return Instance?._game; } }
     public static ObjectManager Object { get { return Instance?._object; } }
@@ -69,6 +70,7 @@ public class Managers : MonoBehaviour
     public static GameModeService GameMode { get { return Instance?._gameMode; } }
     public static CameraManager Camera { get { return Instance?._camera; } }
     public static SoundManager Sound { get { return Instance?._sound; } }
+    public static VFXManager VFX { get { return Instance?._vfx; } }
     #endregion
 
     #region Core
@@ -137,6 +139,9 @@ public class Managers : MonoBehaviour
 
         // 사운드 시스템 초기화
         _sound.Init();
+
+        // VFX 시스템 초기화
+        _vfx.Init();
 
         // 네트워크 컴포넌트 초기화
         await InitializeNetworkComponents();
@@ -336,6 +341,7 @@ public class Managers : MonoBehaviour
     private void OnDestroy()
     {
         _sound?.Clear();
+        _vfx?.Clear();
         _stateMachine?.Dispose();
         _actionDispatcher?.Dispose();
         _actionBus?.Dispose();
