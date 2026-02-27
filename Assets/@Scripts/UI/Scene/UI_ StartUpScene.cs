@@ -390,6 +390,7 @@ public class UI_StartUpScene : UI_Scene
 
     void OnClickRecipeButton(PointerEventData evt)
     {
+        GameLogger.Info("UI_StartUpScene", "설정 팝업 열기 버튼 클릭!");
         Managers.UI.ShowPopupUI<UI_SettingsPopup>();
     }
     void OnClickExitButton(PointerEventData evt)

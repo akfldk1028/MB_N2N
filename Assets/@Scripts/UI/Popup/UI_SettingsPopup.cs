@@ -49,11 +49,8 @@ public class UI_SettingsPopup : UI_Popup
 		GetObject((int)GameObjects.CloseArea).BindEvent(OnClickCloseArea);
 		GetButton((int)Buttons.CloseButton).gameObject.BindEvent(OnClickCloseButton);
 
-		// Slider callbacks for real-time volume preview
 		GetSlider((int)Sliders.BGMSlider).onValueChanged.AddListener(OnBGMSliderChanged);
 		GetSlider((int)Sliders.SFXSlider).onValueChanged.AddListener(OnSFXSliderChanged);
-
-		// Toggle callback for vibration
 		GetToggle((int)Toggles.VibrationToggle).onValueChanged.AddListener(OnVibrationToggleChanged);
 
 		Refresh();
@@ -66,19 +63,28 @@ public class UI_SettingsPopup : UI_Popup
 		if (_init == false)
 			return;
 
-		// Load current sound settings from SoundManager
-		float bgmVolume = Managers.Sound.BgmVolume;
-		float sfxVolume = Managers.Sound.SfxVolume;
+		Slider bgmSlider = GetSlider((int)Sliders.BGMSlider);
+		Slider sfxSlider = GetSlider((int)Sliders.SFXSlider);
+		Toggle vibrationToggle = GetToggle((int)Toggles.VibrationToggle);
 
-		GetSlider((int)Sliders.BGMSlider).value = bgmVolume;
-		GetSlider((int)Sliders.SFXSlider).value = sfxVolume;
+		// Remove listeners before setting values to avoid redundant callbacks
+		bgmSlider.onValueChanged.RemoveListener(OnBGMSliderChanged);
+		sfxSlider.onValueChanged.RemoveListener(OnSFXSliderChanged);
+		vibrationToggle.onValueChanged.RemoveListener(OnVibrationToggleChanged);
 
-		GetText((int)Texts.BGMValueText).text = Mathf.RoundToInt(bgmVolume * 100).ToString();
-		GetText((int)Texts.SFXValueText).text = Mathf.RoundToInt(sfxVolume * 100).ToString();
+		// Load current values
+		bgmSlider.value = Managers.Sound.BgmVolume;
+		sfxSlider.value = Managers.Sound.SfxVolume;
+		vibrationToggle.isOn = PlayerPrefs.GetInt(PREF_VIBRATION, 1) == 1;
 
-		// Load vibration setting from PlayerPrefs
-		bool vibrationOn = PlayerPrefs.GetInt(PREF_VIBRATION, 1) == 1;
-		GetToggle((int)Toggles.VibrationToggle).isOn = vibrationOn;
+		// Update volume text displays
+		GetText((int)Texts.BGMValueText).text = Mathf.RoundToInt(bgmSlider.value * 100).ToString();
+		GetText((int)Texts.SFXValueText).text = Mathf.RoundToInt(sfxSlider.value * 100).ToString();
+
+		// Re-add listeners
+		bgmSlider.onValueChanged.AddListener(OnBGMSliderChanged);
+		sfxSlider.onValueChanged.AddListener(OnSFXSliderChanged);
+		vibrationToggle.onValueChanged.AddListener(OnVibrationToggleChanged);
 	}
 
 	void OnBGMSliderChanged(float value)
