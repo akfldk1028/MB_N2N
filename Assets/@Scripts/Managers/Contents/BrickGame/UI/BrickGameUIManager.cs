@@ -10,6 +10,7 @@ using MB.Infrastructure.Messages;
 /// - Score: 점수 표시 담당
 /// - Territory: 땅따먹기 바 담당
 /// - GameResult: 게임 결과 표시 담당
+/// - ComponentGauge: 컴포넌트 게이지 (Bomb/Harvest) 담당
 /// </summary>
 public class BrickGameUIManager
 {
@@ -17,6 +18,7 @@ public class BrickGameUIManager
     private ScoreUIController _score;
     private TerritoryUIController _territory;
     private GameResultUIController _gameResult;
+    private ComponentGaugeUIController _componentGauge;
 
     /// <summary>
     /// 점수 UI 컨트롤러
@@ -35,6 +37,12 @@ public class BrickGameUIManager
     /// Managers.UI.BrickGame.GameResult 로 접근
     /// </summary>
     public GameResultUIController GameResult => _gameResult;
+
+    /// <summary>
+    /// 컴포넌트 게이지 UI 컨트롤러 (Bomb/Harvest)
+    /// Managers.UI.BrickGame.ComponentGauge 로 접근
+    /// </summary>
+    public ComponentGaugeUIController ComponentGauge => _componentGauge;
     #endregion
 
     #region State
@@ -48,8 +56,9 @@ public class BrickGameUIManager
         _score = new ScoreUIController();
         _territory = new TerritoryUIController();
         _gameResult = new GameResultUIController();
+        _componentGauge = new ComponentGaugeUIController();
 
-        GameLogger.SystemStart("BrickGameUIManager", "생성됨 (Score + Territory + GameResult)");
+        GameLogger.SystemStart("BrickGameUIManager", "생성됨 (Score + Territory + GameResult + ComponentGauge)");
     }
     #endregion
 
@@ -70,6 +79,7 @@ public class BrickGameUIManager
         _score.Initialize();
         _territory.Initialize();
         _gameResult.Initialize();
+        _componentGauge.Initialize();
 
         // ActionBus 이벤트 구독
         SubscribeToEvents();
@@ -99,6 +109,9 @@ public class BrickGameUIManager
             _score.UpdateScores(p0Score, p1Score);
             _territory.UpdateRatio(territory);
 
+            // 컴포넌트 게이지 초기 동기화
+            SyncComponentGauges();
+
             GameLogger.Info("BrickGameUIManager",
                 $"초기 점수 동기화: P0={p0Score}, P1={p1Score}, Territory={territory:F2}");
         }
@@ -106,6 +119,29 @@ public class BrickGameUIManager
         {
             GameLogger.DevLog("BrickGameUIManager", "BrickGameMultiplayerSpawner 없음 - 이벤트 구독만 대기");
         }
+    }
+
+    /// <summary>
+    /// 컴포넌트 게이지 초기 동기화 (ComponentChargeManager에서 현재 값 가져오기)
+    /// </summary>
+    private void SyncComponentGauges()
+    {
+        var chargeManager = Managers.Game?.BrickGame?.Charge;
+        if (chargeManager == null) return;
+
+        // 로컬 플레이어 ID (멀티플레이어: 0 또는 1, 싱글: 0)
+        int playerID = 0;
+
+        float bombRatio = chargeManager.GetChargeRatio(playerID, "bomb");
+        bool bombUsable = chargeManager.CanUseComponent(playerID, "bomb");
+        _componentGauge.UpdateBombGauge(bombRatio, bombUsable);
+
+        float harvestRatio = chargeManager.GetChargeRatio(playerID, "harvest");
+        bool harvestUsable = chargeManager.CanUseComponent(playerID, "harvest");
+        _componentGauge.UpdateHarvestGauge(harvestRatio, harvestUsable);
+
+        GameLogger.DevLog("BrickGameUIManager",
+            $"컴포넌트 게이지 동기화: Bomb={bombRatio:F2}, Harvest={harvestRatio:F2}");
     }
 
     /// <summary>
@@ -122,6 +158,7 @@ public class BrickGameUIManager
         _score.Cleanup();
         _territory.Cleanup();
         _gameResult.Cleanup();
+        _componentGauge.Cleanup();
 
         _initialized = false;
         GameLogger.Info("BrickGameUIManager", "정리 완료");
@@ -133,6 +170,7 @@ public class BrickGameUIManager
     private IDisposable _territorySubscription;
     private IDisposable _gameEndedSubscription;
     private IDisposable _gameStateSubscription;
+    private IDisposable _chargeSubscription;
 
     private void SubscribeToEvents()
     {
@@ -147,6 +185,9 @@ public class BrickGameUIManager
 
         // 게임 상태 변경 이벤트 → GameResult 컨트롤러로 전달
         _gameStateSubscription = Managers.Subscribe(ActionId.BrickGame_GameStateChanged, OnGameStateChanged);
+
+        // 컴포넌트 게이지 충전 변경 이벤트 → ComponentGauge 컨트롤러로 전달
+        _chargeSubscription = Managers.Subscribe(ActionId.BrickGame_ComponentChargeChanged, OnComponentChargeChanged);
 
         GameLogger.Info("BrickGameUIManager", "ActionBus 구독 완료");
     }
@@ -164,6 +205,9 @@ public class BrickGameUIManager
 
         _gameStateSubscription?.Dispose();
         _gameStateSubscription = null;
+
+        _chargeSubscription?.Dispose();
+        _chargeSubscription = null;
 
         GameLogger.Info("BrickGameUIManager", "ActionBus 구독 해제");
     }
@@ -235,6 +279,30 @@ public class BrickGameUIManager
             GameLogger.DevLog("BrickGameUIManager", $"GameState 변경: {payload.Phase}");
         }
     }
+
+    /// <summary>
+    /// 컴포넌트 게이지 충전 변경 콜백 → ComponentGauge 컨트롤러로 위임
+    /// ComponentChargeManager에서 발행한 Bomb/Harvest 게이지 변경 이벤트 처리
+    /// </summary>
+    private void OnComponentChargeChanged(ActionMessage message)
+    {
+        if (message.TryGetPayload<ComponentChargePayload>(out var payload))
+        {
+            bool usable = payload.Ratio >= 1.0f;
+
+            if (payload.ComponentID == "bomb")
+            {
+                _componentGauge.UpdateBombGauge(payload.Ratio, usable);
+            }
+            else if (payload.ComponentID == "harvest")
+            {
+                _componentGauge.UpdateHarvestGauge(payload.Ratio, usable);
+            }
+
+            GameLogger.DevLog("BrickGameUIManager",
+                $"ComponentCharge 업데이트: {payload.ComponentID} Ratio={payload.Ratio:F2}, Usable={usable}");
+        }
+    }
     #endregion
 
     #region Public API
@@ -246,6 +314,7 @@ public class BrickGameUIManager
         _score.Refresh();
         _territory.Refresh();
         _gameResult.Refresh();
+        _componentGauge.Refresh();
     }
 
     /// <summary>
@@ -256,6 +325,7 @@ public class BrickGameUIManager
         _score.Reset();
         _territory.Reset();
         _gameResult.Reset();
+        _componentGauge.Reset();
     }
 
     /// <summary>

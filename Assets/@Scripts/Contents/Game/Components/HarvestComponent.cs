@@ -6,14 +6,14 @@ using System.Collections.Generic;
 /// 수확 컴포넌트 - 시간에 따라 주변 블록 자동 점령
 ///
 /// 특징:
-/// - 충전식 (IChargeableComponent) - 블록 점령할 때마다 충전
-/// - 최대 충전 시 자동 발동 또는 수동 발동
-/// - 주변 적 블록을 서서히 내 블록으로 변환
+/// - 게이지 기반 발동 (ComponentChargeManager에서 충전 관리)
+/// - H키 수동 발동 (MapComponentManager 경유)
+/// - 주변 적 블록을 서서히 내 블록으로 변환 (10블록, 초당 1개)
 ///
 /// 사용법:
 /// 1. GameObject에 HarvestComponent 추가
 /// 2. Managers.Map.Components.Register(harvestComponent, playerID)
-/// 3. 자동 충전 또는 Managers.Map.Components.Use(playerID, "harvest")
+/// 3. 게이지 충전 후 H키로 Managers.Map.Components.Use(playerID, "harvest")
 /// </summary>
 public class HarvestComponent : MonoBehaviour, IChargeableComponent
 {
@@ -21,8 +21,8 @@ public class HarvestComponent : MonoBehaviour, IChargeableComponent
 
     [Header("Harvest Settings")]
     [SerializeField] private float harvestRadius = 2f;
-    [SerializeField] private int blocksPerHarvest = 3;
-    [SerializeField] private float harvestInterval = 0.5f; // 블록당 수확 간격
+    [SerializeField] private int blocksPerHarvest = 10;
+    [SerializeField] private float harvestInterval = 1.0f; // 블록당 수확 간격
 
     [Header("Charge Settings")]
     [SerializeField] private int maxCharge = 10;
@@ -61,7 +61,7 @@ public class HarvestComponent : MonoBehaviour, IChargeableComponent
     }
 
     public bool IsActive => _isActive;
-    public bool CanUse => _currentCharge >= maxCharge && _isActive && !_isHarvesting;
+    public bool CanUse => _isActive && !_isHarvesting;
 
     public void Initialize(IMap map, int ownerPlayerID)
     {
@@ -87,33 +87,22 @@ public class HarvestComponent : MonoBehaviour, IChargeableComponent
     {
         if (!CanUse)
         {
-            Debug.Log($"<color=yellow>[HarvestComponent] 사용 불가 - 충전: {_currentCharge}/{maxCharge}</color>");
+            Debug.Log($"<color=yellow>[HarvestComponent] 사용 불가 - Active: {_isActive}, Harvesting: {_isHarvesting}</color>");
             return;
         }
 
-        // 수확 실행
+        // 수확 실행 (충전 소모는 MapComponentManager에서 처리)
         StartCoroutine(ExecuteHarvest());
-
-        // 충전 소모
-        _currentCharge = 0;
     }
 
     public void OnBlockCaptured(GameObject block, int oldOwnerID, int newOwnerID)
     {
-        // 내가 블록을 점령했을 때 충전
-        if (newOwnerID == _ownerPlayerID && oldOwnerID != _ownerPlayerID)
-        {
-            AddCharge(chargePerCapture);
-        }
+        // 충전은 ComponentChargeManager에서 벽돌 파괴 기반으로 처리
     }
 
     public void OnTick(float deltaTime)
     {
-        // 자동 발동 체크
-        if (autoActivateOnFull && CanUse)
-        {
-            Use();
-        }
+        // 발동은 H키 수동 입력으로 처리 (MapComponentManager 경유)
     }
 
     #endregion

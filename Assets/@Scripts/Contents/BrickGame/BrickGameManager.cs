@@ -105,6 +105,7 @@ public class BrickGameManager
     private BallManager _ballManager;
     private BrickManager _brickManager;
     private PowerUpDropManager _powerUpDropManager;
+    private ComponentChargeManager _chargeManager;
 
     /// <summary>
     /// 패들(Plank) 관리 매니저 접근자
@@ -129,6 +130,12 @@ public class BrickGameManager
     /// Managers.Game.BrickGame.PowerUpDrop 형태로 사용
     /// </summary>
     public PowerUpDropManager PowerUpDrop => _powerUpDropManager;
+
+    /// <summary>
+    /// 컴포넌트 게이지 충전 매니저 접근자
+    /// Managers.Game.BrickGame.Charge 형태로 사용
+    /// </summary>
+    public ComponentChargeManager Charge => _chargeManager;
     #endregion
     
     #region 이벤트
@@ -153,6 +160,7 @@ public class BrickGameManager
         _ballManager = new BallManager();
         _brickManager = new BrickManager();
         _powerUpDropManager = new PowerUpDropManager();
+        _chargeManager = new ComponentChargeManager();
 
         // Sub-Manager 이벤트 구독
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
@@ -238,12 +246,15 @@ public class BrickGameManager
         // 신기록 플래그 리셋
         _isNewRecord = false;
 
+        // 컴포넌트 게이지 초기화
+        _chargeManager?.Reset();
+
         // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
         Managers.Game?.Rules?.Reset();
 
         // 이벤트 발생 (UI가 구독하여 점수 업데이트)
         OnScoreChanged?.Invoke(_state.CurrentScore);
-        
+
         // ✅ 그 다음 게임 시작 상태로 설정
         _state.CurrentPhase = GamePhase.Playing;
         _state.CurrentLevel = _settings.initialLevel;
@@ -371,6 +382,10 @@ public class BrickGameManager
                 new BrickGameScorePayload(_state.CurrentScore, _state.CurrentLevel));
             GameLogger.DevLog("BrickGameManager", $"[싱글플레이어] ActionBus 점수 발행: {_state.CurrentScore}");
         }
+
+        // ✅ 컴포넌트 게이지 충전 (벽돌 파괴 점수의 10%)
+        // 싱글플레이어: playerID=0, 멀티플레이어: 각 플레이어별 BrickGameManager 인스턴스에서 호출
+        _chargeManager?.OnBrickDestroyed(waveValue, 0);
     }
 
     /// <summary>
@@ -828,6 +843,9 @@ public class BrickGameManager
         _state.Reset();
         _state.ResetRowsSpawned();
         _state.ResetScore();
+
+        // ✅ 컴포넌트 게이지 초기화
+        _chargeManager?.Reset();
 
         // GameRule 상태 리셋
         Managers.Game?.Rules?.Reset();

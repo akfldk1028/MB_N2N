@@ -163,15 +163,43 @@ public class MapComponentManager
 
     /// <summary>
     /// 플레이어가 컴포넌트 사용
+    /// ComponentChargeManager 게이지 확인 후 발동, 사용 후 게이지 소비
+    /// chargeManager가 없을 경우 기존 CanUse 로직으로 폴백
     /// </summary>
     public bool Use(int playerID, string componentID)
     {
         var component = GetByID(componentID, playerID);
 
-        if (component != null && component.CanUse)
+        if (component == null)
+            return false;
+
+        // ComponentChargeManager 게이지 체크
+        var chargeManager = Managers.Game?.BrickGame?.Charge;
+
+        if (chargeManager != null)
+        {
+            // 게이지 풀 충전 확인
+            if (!chargeManager.CanUseComponent(playerID, componentID))
+            {
+                Debug.Log($"<color=yellow>[MapComponentManager] 게이지 부족: {component.DisplayName} (Player {playerID})</color>");
+                return false;
+            }
+
+            // 컴포넌트 발동
+            component.Use();
+
+            // 게이지 소비 (리셋)
+            chargeManager.ConsumeCharge(playerID, componentID);
+
+            Debug.Log($"<color=green>[MapComponentManager] 사용: {component.DisplayName} (Player {playerID}) - 게이지 소비됨</color>");
+            return true;
+        }
+
+        // 폴백: chargeManager가 없는 경우 기존 CanUse 로직 사용
+        if (component.CanUse)
         {
             component.Use();
-            Debug.Log($"<color=green>[MapComponentManager] 사용: {component.DisplayName} (Player {playerID})</color>");
+            Debug.Log($"<color=green>[MapComponentManager] 사용: {component.DisplayName} (Player {playerID}) - 폴백 모드</color>");
             return true;
         }
 

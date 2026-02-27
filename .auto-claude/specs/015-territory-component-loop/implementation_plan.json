@@ -1,0 +1,376 @@
+{
+  "feature": "Territory Component Charge & Use Loop (Bomb/Harvest)",
+  "workflow_type": "feature",
+  "workflow_rationale": "New gameplay feature: gauge-based component activation loop. Requires new POCO manager, modifications to existing components, and new UI controller. Single-service (Unity game) but multi-layer (core logic, component integration, UI).",
+  "status": "human_review",
+  "planStatus": "review",
+  "xstateState": "human_review",
+  "executionPhase": "complete",
+  "taskType": "default",
+  "priority": 15,
+  "complexity": "standard",
+  "created_at": "2026-02-18T15:00:00Z",
+  "updated_at": "2026-02-18T16:13:30.165483+00:00",
+  "phases": [
+    {
+      "id": "phase-1-charge-system",
+      "phase": 1,
+      "name": "Core Charge System",
+      "type": "implementation",
+      "description": "Create ComponentChargeManager POCO class and add ActionBus infrastructure for charge events. This is the foundation that all other phases depend on.",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add BrickGame_ComponentChargeChanged ActionId and ComponentChargePayload to the ActionBus messaging system",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Infrastructure/Messages/IAction.cs"
+          ],
+          "notes": "Added BrickGame_ComponentChargeChanged ActionId enum value after BrickGame_GameEnded. Added ComponentChargePayload readonly struct with PlayerID (int), ComponentID (string), CurrentCharge (float), MaxCharge (float), Ratio (float) fields. Follows existing payload patterns. Committed as 7837a21.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify IAction.cs has new ActionId and payload struct. Check: enum value exists, payload implements IActionPayload, constructor initializes all fields."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:48:00.777444+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Create ComponentChargeManager.cs POCO class that tracks Bomb (100) and Harvest (150) gauges per player, charges from brick destruction score (10%), and publishes gauge changes via ActionBus",
+          "service": "unity-game",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Contents/BrickGame/ComponentChargeManager.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs",
+            "Assets/@Scripts/Contents/BrickGame/BrickGameState.cs"
+          ],
+          "notes": "Created ComponentChargeManager.cs POCO class with all required methods: OnBrickDestroyed() (10% charge rate), CanUseComponent() (checks gauge >= max), ConsumeCharge() (resets to 0), GetChargeRatio() (0.0-1.0), GetCurrentCharge(), Reset(). Constants: BOMB_MAX_CHARGE=100f, HARVEST_MAX_CHARGE=150f, CHARGE_RATE=0.10f. Per-player Dictionary<int, ChargeState> tracking. Publishes BrickGame_ComponentChargeChanged via ActionBus. Committed as bfd1512.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify ComponentChargeManager.cs exists with: OnBrickDestroyed(), CanUseComponent(), ConsumeCharge(), GetChargeRatio(), Reset() methods. Constants match spec (Bomb=100, Harvest=150, 10% rate)."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:50:21.598740+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-game-integration",
+      "phase": 2,
+      "name": "Game Loop Integration",
+      "type": "implementation",
+      "description": "Wire ComponentChargeManager into BrickGameManager, modify MapComponentManager to gate on charge, and update BombComponent/HarvestComponent for gauge-based activation.",
+      "depends_on": [
+        "phase-1-charge-system"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Wire ComponentChargeManager into BrickGameManager as sub-manager (Managers.Game.BrickGame.Charge). Initialize in constructor, call OnBrickDestroyed from AddScore(), reset on StartGame/RestartGame.",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/BrickGame/BrickGameManager.cs"
+          ],
+          "notes": "Wired ComponentChargeManager into BrickGameManager. Added: (1) private _chargeManager field, (2) public Charge accessor property, (3) initialization in constructor, (4) OnBrickDestroyed(waveValue, 0) call in AddScore(), (5) Reset() calls in both StartGame() and RestartGame(). Committed as f9b2528.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify BrickGameManager has Charge property. Verify OnBrickDestroyed called from AddScore with correct playerID. Verify Reset called on game start/restart."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:52:48.727576+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Modify MapComponentManager.Use() to check ComponentChargeManager gauge before allowing component activation, and consume charge after successful use",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/Game/Components/MapComponentManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/Game/Components/MapComponentManager.cs"
+          ],
+          "notes": "Modified MapComponentManager.Use() to integrate ComponentChargeManager gauge checking. Flow: (1) Get component, return false if null. (2) Get chargeManager via Managers.Game?.BrickGame?.Charge. (3) If chargeManager exists: check CanUseComponent() → component.Use() → ConsumeCharge(). (4) Fallback when chargeManager is null: use original component.CanUse logic. Committed as 9466b27.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify Use() checks gauge before activation. Verify charge consumed after use. Verify fallback when chargeManager is null."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:54:30.904708+00:00"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Update BombComponent for gauge-based activation: simplify CanUse to IsActive only (gauge check done externally), remove cooldown from Use()",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/Game/Components/BombComponent.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/Game/Components/BombComponent.cs"
+          ],
+          "notes": "BombComponent updated for gauge-based activation. Changes: (1) CanUse simplified to _isActive only, (2) Use() no longer sets cooldown (gauge consumed by MapComponentManager), (3) OnTick() cooldown countdown removed. All explosion/capture/effect logic unchanged. Committed as 0562bf1.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify CanUse = _isActive only. Verify Use() has no cooldown set. Verify explosion logic unchanged."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:55:54.858679+00:00"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Update HarvestComponent for gauge-based activation: simplify CanUse, remove internal charge logic, update harvest settings to 10 blocks at 1s interval per spec",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Contents/Game/Components/HarvestComponent.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Contents/Game/Components/HarvestComponent.cs"
+          ],
+          "notes": "HarvestComponent updated for gauge-based activation. Changes: (1) CanUse simplified to _isActive and not _isHarvesting (removed charge check), (2) Use() no longer resets _currentCharge (charge consumed by MapComponentManager), (3) OnBlockCaptured() no longer calls AddCharge (charging via ComponentChargeManager from brick destruction), (4) OnTick() no longer auto-activates (manual H key via MapComponentManager), (5) blocksPerHarvest=10 and harvestInterval=1.0f per spec (10 blocks at 1 per second = 10s harvest). All harvest/capture/effect logic unchanged. Committed as 19d43bb.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify CanUse = _isActive && !_isHarvesting. Verify OnBlockCaptured does not charge. Verify OnTick does not auto-activate. Verify blocksPerHarvest=10, harvestInterval=1.0f."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T15:58:24.669477+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-ui",
+      "phase": 3,
+      "name": "Gauge UI",
+      "type": "implementation",
+      "description": "Create ComponentGaugeUIController and integrate it into BrickGameUIManager to display Bomb/Harvest gauge bars with usable-state indicators.",
+      "depends_on": [
+        "phase-1-charge-system"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create ComponentGaugeUIController.cs following TerritoryUIController pattern: tracks bomb/harvest gauge ratios, binds to UI Image elements for gauge bars, shows usable state via icon visibility",
+          "service": "unity-game",
+          "files_to_modify": [],
+          "files_to_create": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/ComponentGaugeUIController.cs"
+          ],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/TerritoryUIController.cs",
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/ScoreUIController.cs"
+          ],
+          "notes": "Created ComponentGaugeUIController.cs following TerritoryUIController pattern exactly. POCO class with: State (_bombRatio, _harvestRatio, _bombUsable, _harvestUsable), UI References (Image fills + GameObject icons), Colors (orange bomb, green harvest, white usable), Events (OnBombGaugeChanged, OnHarvestGaugeChanged), BindUI with 4 params (2 required + 2 optional), UpdateBombGauge/UpdateHarvestGauge with change detection, all lifecycle methods (Initialize, Cleanup, Refresh, Reset, UnbindUI), RefreshUI handles fillAmount + color + icon visibility. Committed as 5547ab0.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify file structure matches TerritoryUIController pattern. Verify BindUI, UpdateBombGauge, UpdateHarvestGauge, all lifecycle methods exist."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T16:00:18.523839+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Integrate ComponentGaugeUIController into BrickGameUIManager: add as 4th sub-controller, subscribe to BrickGame_ComponentChargeChanged, wire all lifecycle methods",
+          "service": "unity-game",
+          "files_to_modify": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/BrickGameUIManager.cs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "Assets/@Scripts/Managers/Contents/BrickGame/UI/BrickGameUIManager.cs"
+          ],
+          "notes": "Integrated ComponentGaugeUIController into BrickGameUIManager as 4th sub-controller. Changes:\n\nSub-Controllers region:\n- Added private ComponentGaugeUIController _componentGauge field\n- Added public ComponentGaugeUIController ComponentGauge property\n- Updated class comment hierarchy\n\nConstructor:\n- Added _componentGauge = new ComponentGaugeUIController()\n- Updated log message to include ComponentGauge\n\nInitialize/Cleanup:\n- Added _componentGauge.Initialize() and _componentGauge.Cleanup()\n\nActionBus region:\n- Added _chargeSubscription field\n- Subscribe to BrickGame_ComponentChargeChanged in SubscribeToEvents()\n- Dispose _chargeSubscription in UnsubscribeFromEvents()\n- Added OnComponentChargeChanged handler that routes bomb/harvest payloads to ComponentGaugeUIController\n\nSync:\n- Added SyncComponentGauges() helper that reads from Managers.Game?.BrickGame?.Charge\n- Called from SyncInitialScores() for initial state sync\n\nPublic API:\n- Added _componentGauge.Refresh() in RefreshAll()\n- Added _componentGauge.Reset() in Reset()\n\nCommitted as 8887395.",
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify ComponentGauge property added. Verify ActionBus subscription. Verify all lifecycle methods include _componentGauge."
+          },
+          "status": "completed",
+          "updated_at": "2026-02-18T16:03:04.879159+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-validation",
+      "phase": 4,
+      "name": "Compile Validation",
+      "type": "integration",
+      "description": "Verify all changes compile without errors and the full charge-use loop is logically connected end-to-end.",
+      "depends_on": [
+        "phase-2-game-integration",
+        "phase-3-ui"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "End-to-end code review: verify all modified files for compile correctness, confirm the full loop is connected (brick destroy -> charge -> gauge full -> key press -> activate -> reset -> UI update), check all ActionBus pub/sub pairs match",
+          "service": "unity-game",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify complete loop:\n1. Brick destroyed -> BrickGameManager.AddScore -> ComponentChargeManager.OnBrickDestroyed -> gauge increments\n2. ComponentChargeManager publishes BrickGame_ComponentChargeChanged -> BrickGameUIManager receives -> ComponentGaugeUIController updates\n3. Gauge full -> ComponentChargeManager.CanUseComponent returns true\n4. B/H key -> Input_UseMapComponent -> (MP: ServerRpc ->) MapComponentManager.Use -> checks gauge -> component.Use() -> ConsumeCharge -> gauge resets -> UI updates\n5. All ActionId/Payload types match between publish and subscribe\n6. No compile errors (check using statements, type references, method signatures)"
+          },
+          "status": "completed",
+          "notes": "End-to-end code review completed. All 8 files verified for compile correctness. Full charge-use loop confirmed connected: brick destroy -> charge gauge (10% of score) -> ActionBus publish -> UI update -> gauge full -> B/H key input -> ServerRpc -> MapComponentManager.Use() -> gauge check -> component.Use() -> ConsumeCharge -> gauge reset -> UI reset. All ActionBus pub/sub pairs match (ActionId + Payload type). All string IDs consistent (\"bomb\"/\"harvest\"). No compile errors found.",
+          "updated_at": "2026-02-18T16:07:35.901984+00:00"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 4,
+    "total_subtasks": 9,
+    "services_involved": [
+      "unity-game"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-2-game-integration",
+            "phase-3-ui"
+          ],
+          "reason": "Both depend only on phase-1-charge-system. Phase 2 modifies game logic files, Phase 3 modifies UI files - no overlapping files."
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential recommended - single Unity project, file dependencies within phases"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 015 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "manual"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All C# files compile with 0 errors",
+      "Brick destruction charges Bomb gauge (10% of score toward 100)",
+      "Brick destruction charges Harvest gauge (10% of score toward 150)",
+      "B key triggers Bomb when gauge is full",
+      "H key triggers Harvest when gauge is full",
+      "Gauge resets to 0 after component use",
+      "UI shows gauge bars for Bomb and Harvest",
+      "UI shows usable state when gauge is full"
+    ],
+    "verification_steps": [
+      {
+        "name": "Compile Check",
+        "command": "Manual Unity compile check - open project and verify 0 errors in Console",
+        "expected_outcome": "0 compile errors",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Code Review",
+        "command": "Review all modified files for logical correctness",
+        "expected_outcome": "All ActionBus publish/subscribe pairs match, all method calls are valid",
+        "type": "manual",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Unity project without CI pipeline - manual compile verification required. Medium risk due to modifying existing component behavior (BombComponent cooldown removal, HarvestComponent charge removal)."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "compile_verification": {
+      "required": true,
+      "checks": [
+        "All C# files have valid syntax",
+        "No missing references",
+        "No type mismatches"
+      ]
+    }
+  },
+  "qa_signoff": {
+    "status": "approved",
+    "timestamp": "2026-02-19T12:00:00Z",
+    "qa_session": 1,
+    "report_file": "qa_report.md",
+    "tests_passed": {
+      "compile_verification": "PASS - all type references, method signatures, using statements verified",
+      "code_review": "PASS - 8/8 files reviewed",
+      "pattern_compliance": "PASS - follows TerritoryUIController pattern exactly",
+      "security_review": "PASS - no issues",
+      "e2e_loop_verification": "PASS - full charge-use loop connected"
+    },
+    "acceptance_criteria_met": "7/7",
+    "issues_found": [
+      {
+        "type": "minor",
+        "title": "Gauge consumed when HarvestComponent is busy",
+        "location": "MapComponentManager.cs:188-192",
+        "fix_required": "Optional - add component.CanUse check in chargeManager path"
+      },
+      {
+        "type": "minor",
+        "title": "Dead code in HarvestComponent",
+        "location": "HarvestComponent.cs:28-30, 112-119",
+        "fix_required": "Optional - remove unused charge fields if interface updated"
+      }
+    ],
+    "verified_by": "qa_agent"
+  },
+  "last_updated": "2026-02-19T12:00:00Z",
+  "qa_iteration_history": [
+    {
+      "iteration": 1,
+      "status": "approved",
+      "timestamp": "2026-02-18T16:13:30.163481+00:00",
+      "issues": [],
+      "duration_seconds": 310.02
+    }
+  ],
+  "qa_stats": {
+    "total_iterations": 1,
+    "last_iteration": 1,
+    "last_status": "approved",
+    "issues_by_type": {}
+  },
+  "reviewReason": "completed"
+}
