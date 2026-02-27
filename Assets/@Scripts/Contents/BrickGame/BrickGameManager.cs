@@ -22,6 +22,11 @@ public class BrickGameManager
     /// 현재 세션에서 파괴한 벽돌 수 (게임 시작 시 리셋, 저장 시 누적)
     /// </summary>
     private int _sessionBricksDestroyed;
+
+    /// <summary>
+    /// 일시정지 전 게임 단계 (Resume 시 복원용)
+    /// </summary>
+    private GamePhase _previousPhase = GamePhase.Idle;
     #endregion
 
     #region 저장 데이터 (Save/Load)
@@ -271,26 +276,62 @@ public class BrickGameManager
     
     /// <summary>
     /// 게임 일시정지
+    /// Time.timeScale = 0 으로 물리/애니메이션 완전 정지
     /// </summary>
     public void PauseGame()
     {
+        // ✅ 이중 일시정지 방지
+        if (_state.CurrentPhase == GamePhase.Paused)
+        {
+            GameLogger.Warning("BrickGameManager", "이미 일시정지 상태입니다. 중복 호출 무시.");
+            return;
+        }
+
+        // ✅ 이전 단계 저장 (Resume 시 복원용)
+        _previousPhase = _state.CurrentPhase;
+
+        // ✅ Time.timeScale 정지 (물리/애니메이션 완전 정지)
+        Time.timeScale = 0f;
+
         _state.CurrentPhase = GamePhase.Paused;
         // ✅ 전역 InputManager는 GameMode로 제어 (필요 시 Managers.Input.SetGameMode(None) 호출)
         _plankManager.Enabled = false;
+
+        // ✅ ActionBus를 통해 게임 상태 변경 알림
+        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
+            new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.Paused));
+
         OnGamePause?.Invoke();
-        GameLogger.Info("BrickGameManager", "게임 일시정지");
+        GameLogger.Info("BrickGameManager", $"게임 일시정지 (이전 상태: {_previousPhase})");
     }
     
     /// <summary>
     /// 게임 재개
+    /// Time.timeScale = 1 로 복원, 이전 GamePhase 복귀
     /// </summary>
     public void ResumeGame()
     {
-        _state.CurrentPhase = GamePhase.Playing;
+        // ✅ 일시정지 상태가 아니면 무시
+        if (_state.CurrentPhase != GamePhase.Paused)
+        {
+            GameLogger.Warning("BrickGameManager", "일시정지 상태가 아닙니다. Resume 호출 무시.");
+            return;
+        }
+
+        // ✅ Time.timeScale 복원
+        Time.timeScale = 1f;
+
+        // ✅ 이전 단계로 복원 (Playing이 아닐 수 있음)
+        _state.CurrentPhase = _previousPhase;
         // ✅ 전역 InputManager는 GameMode로 제어됨
-        _plankManager.Enabled = true;
+        _plankManager.Enabled = (_previousPhase == GamePhase.Playing);
+
+        // ✅ ActionBus를 통해 게임 상태 변경 알림
+        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
+            new MB.Infrastructure.Messages.BrickGameStatePayload(_previousPhase));
+
         OnGameResume?.Invoke();
-        GameLogger.Info("BrickGameManager", "게임 재개");
+        GameLogger.Info("BrickGameManager", $"게임 재개 (복원 상태: {_previousPhase})");
     }
     
     /// <summary>
@@ -298,6 +339,9 @@ public class BrickGameManager
     /// </summary>
     public void GameOver()
     {
+        // ✅ Time.timeScale 안전망: 일시정지 중 게임 오버 시에도 복원
+        Time.timeScale = 1f;
+
         _state.CurrentPhase = GamePhase.GameOver;
         OnGameOver?.Invoke();
         GameLogger.Warning("BrickGameManager", $"게임 오버! 최종 점수: {_state.CurrentScore}");
@@ -364,6 +408,11 @@ public class BrickGameManager
     #endregion
     
     #region Public Methods - 게임 상태 조회
+    /// <summary>
+    /// 게임 일시정지 여부
+    /// </summary>
+    public bool IsPaused => _state.CurrentPhase == GamePhase.Paused;
+
     /// <summary>
     /// 게임 활성화 상태 반환
     /// </summary>
@@ -764,6 +813,9 @@ public class BrickGameManager
     public void RestartGame()
     {
         GameLogger.Info("BrickGameManager", "게임 재시작 중...");
+
+        // ✅ Time.timeScale 안전망: 일시정지 중 재시작 시에도 복원
+        Time.timeScale = 1f;
 
         // 🔒 Server만 처리
         if (!MultiplayerUtil.HasServerAuthority())
