@@ -36,17 +36,24 @@ Managers (Service Locator)
 │   │   ├── BallManager
 │   │   ├── BrickManager
 │   │   ├── PlankManager
+│   │   ├── PowerUpDropManager
+│   │   ├── ComponentChargeManager
 │   │   └── WinConditionManager
 │   └── GameManager
 ├── UI
 │   └── BrickGame (BrickGameUIManager)
 │       ├── Score (ScoreUIController)
 │       ├── Territory (TerritoryUIController)
-│       └── GameResult (GameResultUIController)
+│       ├── GameResult (GameResultUIController)
+│       └── ComponentGauge (ComponentGaugeUIController)
 ├── Network
 │   ├── ConnectionManagerEx (State Pattern)
 │   ├── BrickGameNetworkSync (NetworkBehaviour)
 │   └── LobbyServiceFacadeEx (Sessions API)
+├── Animation
+│   ├── UIAnimationHelper (Coroutine host)
+│   ├── SceneTransitionManager (Fade transitions)
+│   └── ButtonAnimator (Press feedback)
 └── Core
     ├── DataManager
     ├── ResourceManager
@@ -118,7 +125,7 @@ Sessions API (com.unity.services.multiplayer v1.1.8)가 Relay를 자동 처리:
   - `daemon_runner.py`: 자동 코드 수정/빌드 데몬
   - `spec_runner.py`: 태스크 자동 분해
 
-## Current Status (2026-02-09)
+## Current Status (2026-02-27)
 
 ### Completed
 - [x] ConnectionApproval 버그 수정
@@ -127,11 +134,21 @@ Sessions API (com.unity.services.multiplayer v1.1.8)가 Relay를 자동 처리:
 - [x] PlankManager 터치 입력 추가
 - [x] BrickGameNetworkSync StageClear/Victory 이벤트 동기화
 - [x] GamePhase에 Victory 추가
-- [x] 컴파일 0 errors, EditMode 테스트 통과
+- [x] 파티클 이펙트 시스템 (002)
+- [x] UI 폴리시 - 씬 전환 페이드, 버튼 애니메이션, 결과 애니메이션, 매칭 스피너 (003)
+- [x] 설정 팝업 (BGM/SFX 볼륨, 진동 토글) (004)
+- [x] 세이브/로드 시스템 (HighScore, 자동 저장) (005)
+- [x] 모바일 폴리시 (SafeArea, Android 빌드 설정) (006)
+- [x] 일시정지 시스템 (Time.timeScale) (007)
+- [x] 튜토리얼 (008)
+- [x] 파워업 드롭 시스템 (Star/BonusBall) (011)
+- [x] 파워업 종류 추가 (012)
+- [x] 특수 벽돌 (SteelBrick) (013)
+- [x] 콤보 시스템 (014)
+- [x] 컴포넌트 게이지 충전 루프 (Bomb/Harvest) (015)
+- [x] 코드 리뷰 및 버그 수정
 
 ### Remaining
 - [ ] PlayMode 테스트 자동화
-- [ ] 사운드 시스템 (BGM, 효과음)
 - [ ] 멀티플랫폼 빌드 설정
 - [ ] Lobby UI 완성 (매칭 대기, JoinCode)
-- [ ] Auto-Claude 데몬 연동
