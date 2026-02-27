@@ -247,7 +247,7 @@ public class BrickGameManager
         _isNewRecord = false;
 
         // 컴포넌트 게이지 초기화
-        _chargeManager?.Reset();
+        _chargeManager.Reset();
 
         // ✅ GameRule 상태 리셋 (CannonBulletRule의 _lastKnownScore 등)
         Managers.Game?.Rules?.Reset();
@@ -385,7 +385,7 @@ public class BrickGameManager
 
         // ✅ 컴포넌트 게이지 충전 (벽돌 파괴 점수의 10%)
         // 싱글플레이어: playerID=0, 멀티플레이어: 각 플레이어별 BrickGameManager 인스턴스에서 호출
-        _chargeManager?.OnBrickDestroyed(waveValue, 0);
+        _chargeManager.OnBrickDestroyed(waveValue, 0);
     }
 
     /// <summary>
@@ -396,25 +396,22 @@ public class BrickGameManager
     {
         if (amount <= 0) return;
 
-        // ✅ 멀티플레이어: NetworkSync 점수 직접 차감 (핵심 수정!)
+        // 로컬 점수 차감 (멀티/싱글 공통 - _state 동기화 유지)
+        int currentScore = _state.CurrentScore;
+        int newScore = UnityEngine.Mathf.Max(0, currentScore - amount);
+        _state.SetScore(newScore);
+
+        // 멀티플레이어: NetworkSync에도 동기화
         if (_networkSync != null && MultiplayerUtil.IsMultiplayer())
         {
             _networkSync.SubtractScore(amount);
-            GameLogger.Info("BrickGameManager", $"[멀티플레이어] 점수 차감 요청: -{amount}");
+            GameLogger.Info("BrickGameManager", $"[멀티플레이어] 점수 차감: {currentScore} → {newScore} (-{amount})");
             return;
         }
 
-        // ✅ 싱글플레이어: 로컬 점수 차감
-        int currentScore = _state.CurrentScore;
-        int newScore = UnityEngine.Mathf.Max(0, currentScore - amount);
-
-        // 점수 직접 설정
-        _state.SetScore(newScore);
-
-        // 이벤트 발생
+        // 싱글플레이어: 이벤트 + ActionBus 발행
         OnScoreChanged?.Invoke(_state.CurrentScore);
 
-        // ActionBus 발행
         Managers.PublishAction(ActionId.BrickGame_ScoreChanged,
             new BrickGameScorePayload(_state.CurrentScore, _state.CurrentLevel));
 
@@ -592,6 +589,7 @@ public class BrickGameManager
         // 🔒 Server만 처리
         if (!MultiplayerUtil.HasServerAuthority())
         {
+            GameLogger.DevLog("BrickGameManager", "Client에서 HandleAllBallsReturned 무시 (Server 권한 필요)");
             return;
         }
 
@@ -617,6 +615,7 @@ public class BrickGameManager
         // 🔒 Server만 처리
         if (!MultiplayerUtil.HasServerAuthority())
         {
+            GameLogger.DevLog("BrickGameManager", "Client에서 HandleAllBricksDestroyed 무시 (Server 권한 필요)");
             return;
         }
 
@@ -626,10 +625,7 @@ public class BrickGameManager
         // 이벤트 발생
         OnStageClear?.Invoke();
 
-        // TODO: ActionBus 발행 (ActionId.BrickGame_StageClear 필요)
-        // Managers.PublishAction(ActionId.BrickGame_StageClear, NoPayload.Instance);
-
-        // ActionBus를 통해 게임 상태 변경 알림
+        // ActionBus를 통해 게임 상태 변경 알림 (StageClear)
         Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
             new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.StageClear));
 
@@ -661,10 +657,7 @@ public class BrickGameManager
         // 이벤트 발생
         OnVictory?.Invoke();
 
-        // TODO: ActionBus 발행 (ActionId.BrickGame_Victory 필요)
-        // Managers.PublishAction(ActionId.BrickGame_Victory, NoPayload.Instance);
-
-        // ActionBus를 통해 게임 상태 변경 알림
+        // ActionBus를 통해 게임 상태 변경 알림 (Victory)
         Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameStateChanged,
             new MB.Infrastructure.Messages.BrickGameStatePayload(GamePhase.Victory));
 
@@ -821,6 +814,31 @@ public class BrickGameManager
     }
     #endregion
 
+    #region 정리 (Cleanup)
+    /// <summary>
+    /// BrickGameManager 정리 - 이벤트 구독 해제 및 SubManager 정리
+    /// GameManager에서 BrickGame을 교체하거나 씬 전환 시 호출
+    /// </summary>
+    public void Cleanup()
+    {
+        // 자동 저장 이벤트 구독 해제
+        OnGameOver -= HandleSaveOnGameOver;
+        OnStageClear -= HandleSaveOnStageClear;
+        OnVictory -= HandleSaveOnVictory;
+
+        // Sub-Manager 이벤트 구독 해제
+        if (_ballManager != null)
+            _ballManager.OnAllBallsReturned -= HandleAllBallsReturned;
+        if (_brickManager != null)
+            _brickManager.OnAllBricksDestroyed -= HandleAllBricksDestroyed;
+
+        // PowerUpDropManager 정리
+        _powerUpDropManager?.Dispose();
+
+        GameLogger.Info("BrickGameManager", "정리 완료 (이벤트 구독 해제)");
+    }
+    #endregion
+
     #region 게임 재시작
     /// <summary>
     /// 게임 재시작 (GameOver 또는 Victory 후)
@@ -845,7 +863,7 @@ public class BrickGameManager
         _state.ResetScore();
 
         // ✅ 컴포넌트 게이지 초기화
-        _chargeManager?.Reset();
+        _chargeManager.Reset();
 
         // GameRule 상태 리셋
         Managers.Game?.Rules?.Reset();

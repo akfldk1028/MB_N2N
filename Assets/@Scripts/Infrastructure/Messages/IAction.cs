@@ -154,6 +154,21 @@ namespace MB.Infrastructure.Messages
     }
 
     /// <summary>
+    /// 파워업 아이템 획득 (타입 + 획득 플레이어)
+    /// </summary>
+    public readonly struct PowerUpPayload : IActionPayload
+    {
+        public PowerUpType Type { get; }
+        public ulong CollectorClientId { get; }
+
+        public PowerUpPayload(PowerUpType type, ulong collectorClientId)
+        {
+            Type = type;
+            CollectorClientId = collectorClientId;
+        }
+    }
+
+    /// <summary>
     /// 컴포넌트 게이지 충전 변경 (Bomb/Harvest 게이지 상태)
     /// </summary>
     public readonly struct ComponentChargePayload : IActionPayload
