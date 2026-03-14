@@ -18,7 +18,7 @@ namespace Unity.Assets.Scripts.Objects
         private int originalWave = 1; // 원래 wave 값 저장 (점수 계산용)
         private TextMeshPro waveText;
         private AudioSource brickHitSound;
-        [SerializeField] private Renderer brickRenderer; // Reference to the brick's renderer for color changes
+        [SerializeField] private SpriteRenderer brickSpriteRenderer; // SpriteRenderer for color changes
 
         #region Public Properties (총알 시스템용)
         /// <summary>
@@ -43,10 +43,10 @@ namespace Unity.Assets.Scripts.Objects
         {
 
 
-            // 필요한 컴포넌트 캐싱
-            if (brickRenderer == null)
+            // SpriteRenderer 캐싱 (프리팹 직렬화 값이 잘못된 경우 대비)
+            if (brickSpriteRenderer == null)
             {
-                brickRenderer = GetComponent<Renderer>();
+                brickSpriteRenderer = GetComponent<SpriteRenderer>();
             }
             
             Transform textTransform = transform.Find("brickWaveText");
@@ -148,7 +148,7 @@ namespace Unity.Assets.Scripts.Objects
         }
         
         // 공과 충돌 시 처리
-        private void HandleBallCollision(Collision2D collision)
+        protected virtual void HandleBallCollision(Collision2D collision)
         {
             // ✅ 멀티플레이어: 소유권 확인
             if (!CheckOwnership(collision.gameObject))
@@ -316,22 +316,21 @@ namespace Unity.Assets.Scripts.Objects
         /// <summary>
         /// 남은 체력(wave)에 따라 벽돌 색상 조정
         /// </summary>
-        private void ColorBrick()
+        protected virtual void ColorBrick()
         {
-            if (brickRenderer == null) return;
-            Debug.Log($"[{gameObject.name}] ColorBrick: brickRenderer = {brickRenderer}");
+            if (brickSpriteRenderer == null) return;
             if (wave <= 30)
             {
-                brickRenderer.material.color = new Color(1, 1 - (wave / 30f), 0); // 노란색에서 빨간색으로 전환
+                brickSpriteRenderer.color = new Color(1, 1 - (wave / 30f), 0); // 노란색에서 빨간색으로 전환
             }
             else if (wave <= 60)
             {
-                brickRenderer.material.color = new Color(1, 0, (wave - 30) / 30f); // 빨간색에서 보라색으로 전환
+                brickSpriteRenderer.color = new Color(1, 0, (wave - 30) / 30f); // 빨간색에서 보라색으로 전환
             }
             else
             {
                 float redColorValue = 1 - ((wave - 60) / 30f);
-                brickRenderer.material.color = new Color(Mathf.Max(redColorValue, 0), 0, 1); // 보라색에서 파란색으로 전환
+                brickSpriteRenderer.color = new Color(Mathf.Max(redColorValue, 0), 0, 1); // 보라색에서 파란색으로 전환
             }
         }
     }

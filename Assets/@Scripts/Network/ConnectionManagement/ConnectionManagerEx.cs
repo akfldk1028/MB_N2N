@@ -485,6 +485,155 @@ namespace Unity.Assets.Scripts.Network
             RequestShutdown();
         }
 
+        /// <summary>
+        /// MPPM 로컬 테스트용 직접 Host 시작
+        /// Unity Services 인증 없이 127.0.0.1:7777로 직접 호스팅
+        /// ConnectionPayload를 설정하여 ApprovalCheck 통과
+        /// </summary>
+        public void StartHostDirect(string playerName)
+        {
+            GameLogger.Progress("ConnectionManagerEx", $"[MPPM] 직접 Host 시작: {playerName}");
+
+            if (m_NetworkManager == null)
+            {
+                GameLogger.Error("ConnectionManagerEx", "[MPPM] NetworkManager가 아직 초기화되지 않음");
+                return;
+            }
+
+            // UnityTransport 설정 — Host는 0.0.0.0에서 리스닝
+            var transport = m_NetworkManager.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport == null)
+                transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+            {
+                transport.SetConnectionData("127.0.0.1", 7777, "0.0.0.0");
+                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Listen 0.0.0.0:7777");
+            }
+            else
+            {
+                GameLogger.Error("ConnectionManagerEx", "[MPPM] UnityTransport를 찾을 수 없음!");
+            }
+
+            // ConnectionPayload 설정 (ApprovalCheck 통과용)
+            string playerId = System.Guid.NewGuid().ToString();
+            var payload = JsonUtility.ToJson(new ConnectionPayload(
+                playerName,
+                playerId,
+                1,
+                UnityEngine.Debug.isDebugBuild
+            ));
+            NetworkManager.NetworkConfig.ConnectionData = System.Text.Encoding.UTF8.GetBytes(payload);
+
+            // 상태를 StartingHost로 전환 후 직접 StartHost 호출
+            m_ConnectionManager_DirectStartHost(playerName, playerId);
+        }
+
+        private void m_ConnectionManager_DirectStartHost(string playerName, string playerId)
+        {
+            try
+            {
+                // 현재 상태를 Exit 처리 후 m_Hosting으로 직접 이동할 준비
+                // OnServerStarted 이벤트가 발생하면 m_CurrentState.OnServerStarted()가 호출됨
+                // m_Offline.OnServerStarted()는 빈 메서드이므로, 직접 m_StartingHost 상태로 설정
+                // (단, Enter()는 호출하지 않음 - ConnectionMethod 없이 직접 StartHost 호출)
+                m_CurrentState?.Exit();
+                m_CurrentState = m_StartingHost; // OnServerStarted에서 m_Hosting으로 전환하기 위해
+
+                bool started = NetworkManager.StartHost();
+                if (started)
+                {
+                    GameLogger.Success("ConnectionManagerEx", $"[MPPM] Host 직접 시작 성공: {playerName}");
+                    // OnServerStarted 이벤트 → m_StartingHost.OnServerStarted() → ChangeState(m_Hosting)
+                }
+                else
+                {
+                    GameLogger.Error("ConnectionManagerEx", "[MPPM] Host 직접 시작 실패");
+                    ChangeState(m_Offline);
+                }
+            }
+            catch (Exception e)
+            {
+                GameLogger.Error("ConnectionManagerEx", $"[MPPM] Host 직접 시작 중 오류: {e.Message}");
+                ChangeState(m_Offline);
+            }
+        }
+
+        /// <summary>
+        /// MPPM 로컬 테스트용 직접 Client 시작
+        /// Unity Services 인증 없이 127.0.0.1:7777로 직접 연결
+        /// ConnectionPayload를 설정하여 ApprovalCheck 통과
+        /// </summary>
+        public void StartClientDirect(string playerName)
+        {
+            GameLogger.Progress("ConnectionManagerEx", $"[MPPM] 직접 Client 시작: {playerName}");
+
+            if (m_NetworkManager == null)
+            {
+                GameLogger.Error("ConnectionManagerEx", "[MPPM] NetworkManager가 아직 초기화되지 않음");
+                return;
+            }
+
+            // UnityTransport 설정 — Client는 127.0.0.1:7777로 연결
+            var transport = m_NetworkManager.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport == null)
+                transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+            {
+                transport.SetConnectionData("127.0.0.1", 7777);
+                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7777");
+            }
+            else
+            {
+                GameLogger.Error("ConnectionManagerEx", "[MPPM] UnityTransport를 찾을 수 없음!");
+            }
+
+            // ConnectionPayload 설정 (ApprovalCheck 통과용)
+            string playerId = System.Guid.NewGuid().ToString();
+            var payload = JsonUtility.ToJson(new ConnectionPayload(
+                playerName,
+                playerId,
+                1,
+                UnityEngine.Debug.isDebugBuild
+            ));
+            NetworkManager.NetworkConfig.ConnectionData = System.Text.Encoding.UTF8.GetBytes(payload);
+
+            try
+            {
+                // 이전 연결 상태 정리
+                if (NetworkManager.IsListening)
+                {
+                    GameLogger.Info("ConnectionManagerEx", "[MPPM] 기존 연결 정리 (Shutdown)");
+                    NetworkManager.Shutdown();
+                }
+
+                // Transport 재설정 (Shutdown 후 필요)
+                if (transport != null)
+                {
+                    transport.SetConnectionData("127.0.0.1", 7777);
+                    GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 재설정: Connect 127.0.0.1:7777");
+                }
+
+                m_CurrentState?.Exit();
+                m_CurrentState = m_ClientConnecting;
+                bool started = NetworkManager.StartClient();
+                if (started)
+                {
+                    GameLogger.Success("ConnectionManagerEx", $"[MPPM] Client 직접 시작 성공: {playerName}");
+                    // OnClientConnected 콜백이 ClientConnected 상태로 전환을 처리함
+                }
+                else
+                {
+                    GameLogger.Error("ConnectionManagerEx", "[MPPM] Client 직접 시작 실패");
+                    ChangeState(m_Offline);
+                }
+            }
+            catch (Exception e)
+            {
+                GameLogger.Error("ConnectionManagerEx", $"[MPPM] Client 직접 시작 중 오류: {e.Message}");
+                ChangeState(m_Offline);
+            }
+        }
+
         public ConnectStatus CurrentStatus
         {
             get

@@ -76,16 +76,120 @@ public class UI_StartUpScene : UI_Scene
         _textBlinkCoroutine = StartCoroutine(BlinkMatchingText());
         StartCoroutine(UpdateMatchingStatus());
 
+#if UNITY_EDITOR
+        // MPPM 감지 시 Unity Services 우회하여 직접 로컬 연결
+        if (IsMPPMActive())
+        {
+            await StartLocalMPPMSession();
+            GameLogger.Info("UI_StartUpScene", "[MPPM] 직접 연결 완료, 매칭 대기 중...");
+            return;
+        }
+#endif
+
         // 멀티플레이어 세션 시작 및 매칭 대기
         // ConnectionManagerEx가 2명 달성 시 자동으로 GameScene으로 전환
         await StartMultiplayerSession();
 
-        // ❌ 제거: 즉시 씬 전환하지 않음
-        // ✅ StartUpScene에서 대기 → 2명 달성 시 ConnectionManagerEx가 자동으로 NetworkManager.SceneManager.LoadScene() 호출
-        // Managers.Scene.LoadScene(EScene.GameScene);
-
         GameLogger.Info("UI_StartUpScene", "매칭 대기 중... (2명 필요)");
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// MPPM(Multiplayer Play Mode)이 활성화된 상태인지 감지
+    /// 클론 인스턴스이거나, 메인 에디터에서 MPPM 태그가 있는 경우 true
+    /// 일반 단일 Play(MPPM 없음)에서는 false
+    /// </summary>
+    private bool IsMPPMActive()
+    {
+        try
+        {
+            // CurrentPlayer는 static 클래스 — 인스턴스가 아닌 타입으로 직접 접근
+            // 클론 인스턴스인 경우 항상 MPPM
+            if (!Unity.Multiplayer.Playmode.CurrentPlayer.IsMainEditor)
+                return true;
+
+            // 메인 에디터에서 MPPM 태그가 있으면 MPPM 활성 상태
+            var tags = Unity.Multiplayer.Playmode.CurrentPlayer.ReadOnlyTags();
+            if (tags != null && tags.Length > 0)
+                return true;
+
+            // Library/VP 폴더가 존재하면 MPPM 활성 (클론이 생성된 상태)
+            string vpPath = System.IO.Path.Combine(Application.dataPath, "..", "Library", "VP");
+            if (System.IO.Directory.Exists(vpPath) && System.IO.Directory.GetDirectories(vpPath).Length > 0)
+            {
+                GameLogger.Info("UI_StartUpScene", "[MPPM] Library/VP 폴더 감지 → MPPM 활성");
+                return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            // MPPM 패키지가 없거나 접근 불가 시
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// MPPM 환경에서 Unity Services 없이 직접 Host/Client로 연결
+    /// 메인 에디터 → Host (127.0.0.1:7777)
+    /// 클론 → 약간의 딜레이 후 Client 연결
+    /// </summary>
+    private async Task StartLocalMPPMSession()
+    {
+        GameLogger.Progress("UI_StartUpScene", "[MPPM] 로컬 직접 연결 모드 시작");
+
+        // Managers 전체 초기화 완료 대기
+        float waitTime = 0f;
+        while (!Managers.Initialized && waitTime < 30f)
+        {
+            await Task.Delay(200);
+            waitTime += 0.2f;
+        }
+        if (!Managers.Initialized)
+        {
+            GameLogger.Error("UI_StartUpScene", "[MPPM] Managers 초기화 타임아웃 (30초)");
+            return;
+        }
+        GameLogger.Success("UI_StartUpScene", $"[MPPM] Managers 초기화 완료 ({waitTime:F1}초 대기)");
+
+        // 멀티플레이어 모드 설정 (2인)
+        Managers.GameMode.SetMultiplayerMode();
+        GameLogger.Success("UI_StartUpScene", "[MPPM] 게임 모드: 멀티플레이어 (2인)");
+
+        // Transport 확인
+        var transport = Managers.Network?.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+        if (transport == null)
+            transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
+        if (transport == null)
+        {
+            GameLogger.Error("UI_StartUpScene", "[MPPM] UnityTransport를 찾을 수 없음");
+            return;
+        }
+
+        bool isMainEditor = Unity.Multiplayer.Playmode.CurrentPlayer.IsMainEditor;
+
+        if (isMainEditor)
+        {
+            // 메인 에디터 → Host
+            GameLogger.Network("UI_StartUpScene", "[MPPM] 메인 에디터 감지 → Host로 시작 (127.0.0.1:7777)");
+            string playerName = "Player_Host";
+            Managers.LocalUser.IsHost = true;
+            Managers.LocalUser.DisplayName = playerName;
+            Managers.Connection.StartHostDirect(playerName);
+        }
+        else
+        {
+            // 클론 → Client (Host가 먼저 시작될 시간 확보)
+            GameLogger.Network("UI_StartUpScene", "[MPPM] 클론 에디터 감지 → Client로 시작 (약 2초 대기)");
+            await Task.Delay(2000); // Host 시작 대기
+            string playerName = "Player_Client";
+            Managers.LocalUser.IsHost = false;
+            Managers.LocalUser.DisplayName = playerName;
+            Managers.Connection.StartClientDirect(playerName);
+        }
+    }
+#endif
 
     /// <summary>
     /// 매칭 상태를 실시간으로 UI에 표시

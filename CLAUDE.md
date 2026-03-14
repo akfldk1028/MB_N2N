@@ -45,3 +45,34 @@ Unity 6 멀티플레이어 벽돌깨기 + 땅따먹기 듀얼 게임.
 - UI 클래스: `UI_XxxScene.cs`, `UI_XxxPopup.cs` (UI_Base 상속)
 - Sub-Controller: `BrickGameUIManager` → `ScoreUIController`, `TerritoryUIController`
 - 새 모듈은 반드시 Managers 패턴 + ActionBus 이벤트 시스템을 따를 것
+
+## MCP Unity 연결
+
+이 프로젝트는 CoderGamester/mcp-unity MCP 서버로 Unity 에디터에 연결되어 있다.
+사용 가능한 도구: `mcp__mcp-unity__*` (30개 도구 + 7개 Resources)
+
+### Unity 에디터 규칙
+- Unity 에디터가 **열려있는 상태**에서만 MCP 도구가 동작한다
+- `Unity.exe -batchmode`는 에디터가 열린 상태에서 **사용 불가** (UnityLockfile 잠금)
+- 빌드/테스트는 `execute_menu_item`으로 에디터 내에서 실행한다
+
+### Play 모드
+- 진입/종료: `execute_menu_item(menuPath: "Edit/Play")` (토글)
+- Play 모드 중 코드 수정 **금지** — 반드시 먼저 종료
+- 도메인 리로드 시 MCP 끊길 수 있음 → Reload Domain 비활성화 권장
+
+### 스크린샷
+- Game View: `execute_menu_item(menuPath: "Tools/Capture Game View")` (Play 모드에서만)
+- Scene View: `execute_menu_item(menuPath: "Tools/Capture Scene View")` (Edit 모드 가능)
+- 파일 위치: `Screenshots/` 폴더
+
+### 코드 수정 → 테스트 루프
+1. `save_scene()` → 코드 수정 → `recompile_scripts(returnWithLogs: true)`
+2. `run_tests(testMode: "EditMode", returnOnlyFailures: true)`
+3. `execute_menu_item("Edit/Play")` → sleep 4초 → 캡쳐 → sleep 2초 → Play 종료
+4. Screenshots/ 최신 PNG Read → 시각 분석 → `get_console_logs(logType: "error")`
+
+### 도구 사용 주의
+- `get_console_logs(includeStackTrace: false)` — **항상 false** (토큰 절약)
+- `update_gameobject(objectPath: "경로")` — 없는 오브젝트는 **자동 생성**됨
+- `batch_execute` — **최대 100개** 오퍼레이션
