@@ -166,9 +166,6 @@ public class BrickGameManager
         _ballManager.OnAllBallsReturned += HandleAllBallsReturned;
         _brickManager.OnAllBricksDestroyed += HandleAllBricksDestroyed;
 
-        // 저장 데이터 로드
-        LoadProgress();
-
         // 자동 저장 이벤트 구독
         OnGameOver += HandleSaveOnGameOver;
         OnStageClear += HandleSaveOnStageClear;
@@ -206,6 +203,9 @@ public class BrickGameManager
         _ballManager.Initialize();
         _brickManager.Initialize();
         _powerUpDropManager.Initialize();
+
+        // 저장 데이터 로드 (Unity API 사용하므로 생성자가 아닌 Initialize에서 호출)
+        LoadProgress();
 
         GameLogger.Success("BrickGameManager", "초기화 완료 (의존성 주입됨)");
     }
@@ -766,6 +766,9 @@ public class BrickGameManager
     /// </summary>
     public void SaveProgress()
     {
+        // 초기화 전이면 저장 스킵
+        if (_state == null || _saveData == null) return;
+
         // 최고 점수 갱신
         if (_state.CurrentScore > _saveData.HighScore)
             _saveData.HighScore = _state.CurrentScore;

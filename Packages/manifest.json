@@ -2,7 +2,7 @@
   "dependencies": {
     "com.antigravity.ide": "https://github.com/prithvi-bharadwaj/Antigravity-IDE.git",
     "com.boxqkrtm.ide.cursor": "https://github.com/boxqkrtm/com.unity.ide.cursor.git",
-    "com.gamelovers.mcp-unity": "https://github.com/CoderGamester/mcp-unity.git",
+    "com.gamelovers.mcp-unity": "https://github.com/CoderGamester/mcp-unity.git#72c005fa0ae22e23c2b531fd0002fc2d472a919e",
     "com.unity.addressables": "2.2.2",
     "com.unity.ai.navigation": "2.0.8",
     "com.unity.collab-proxy": "2.9.3",

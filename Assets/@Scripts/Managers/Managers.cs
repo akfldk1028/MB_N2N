@@ -93,6 +93,16 @@ public class Managers : MonoBehaviour
     public static UIManager UI { get { return Instance?._ui; } }
     #endregion
 
+    /// <summary>
+    /// Domain Reload 비활성화 시 Play 모드 재진입 대비 static 리셋
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        s_instance = null;
+        Initialized = false;
+    }
+
     public static void Init()
     {
         if (s_instance == null && Initialized == false)
@@ -173,6 +183,9 @@ public class Managers : MonoBehaviour
             GameLogger.Success("Managers", "Unity Services 이미 초기화됨");
         }
 
+        // 1-1. MPPM Clone 감지 → 인증 프로필 분리
+        SetupMPPMProfile();
+
         // 2. 단일 GameObject에 모든 네트워크 컴포넌트 추가
         GameLogger.Progress("Managers", "네트워크 시스템 GameObject 생성 중...");
         var networkGo = new GameObject("@NetworkSystems");
@@ -212,6 +225,36 @@ public class Managers : MonoBehaviour
         await ValidateMultiplayerCapabilities();
 
         GameLogger.Success("Managers", "네트워크 컴포넌트 초기화 완료!");
+    }
+
+    /// <summary>
+    /// MPPM(Multiplayer Play Mode) Clone 감지 시 인증 프로필을 분리하여
+    /// 같은 에디터에서 2명이 서로 다른 플레이어로 매칭될 수 있게 함
+    /// </summary>
+    private void SetupMPPMProfile()
+    {
+#if UNITY_EDITOR
+        try
+        {
+            if (Unity.Multiplayer.Playmode.CurrentPlayer.IsMainEditor)
+            {
+                GameLogger.Info("Managers", "MPPM Main Editor - 기본 프로필 사용");
+                return;
+            }
+
+            // Clone인 경우 태그 기반 고유 프로필명 생성
+            var tags = Unity.Multiplayer.Playmode.CurrentPlayer.ReadOnlyTags();
+            string tag = (tags != null && tags.Length > 0) ? tags[0] : "Default";
+            string profileName = $"MPPM_Clone_{tag}";
+
+            AuthenticationService.Instance.SwitchProfile(profileName);
+            GameLogger.Success("Managers", $"MPPM Clone 감지 - 프로필 전환: {profileName}");
+        }
+        catch (Exception e)
+        {
+            GameLogger.Warning("Managers", $"MPPM 프로필 전환 실패 (무시 가능): {e.Message}");
+        }
+#endif
     }
 
     /// <summary>

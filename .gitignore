@@ -229,3 +229,7 @@ replay_pid38220.log
 .worktrees/
 .security-key
 logs/security/
+Screenshots/
+log.txt
+fix_firewall.ps1
+Assets/clone/

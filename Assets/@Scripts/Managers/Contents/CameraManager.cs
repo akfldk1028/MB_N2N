@@ -15,8 +15,15 @@ public class CameraManager
     #region 카메라 참조
     private Camera _mainCamera;   // 씬에 존재 (Main_Camera)
     private Camera _subCamera;    // 씬에 존재 (Sub_Camera)
-    private Vector3 _originalCameraPosition;  // 원래 카메라 위치 (멀티플레이어 기준점)
     #endregion
+
+    // ✅ 게임 영역 설정 (원점 기준)
+    private const float GAME_AREA_WIDTH = 7.2f;     // 경계 좌(-3.6) ~ 우(+3.6)
+    private const float GAME_AREA_TOP = 1.5f;       // TopEnd y + 여유
+    private const float GAME_AREA_BOTTOM = -5.0f;   // Plank y=-4, 공 여유 -1.0
+    private const float GAME_CENTER_Y = (GAME_AREA_TOP + GAME_AREA_BOTTOM) / 2f; // ≈ -1.75
+    private const float GAME_AREA_HEIGHT = GAME_AREA_TOP - GAME_AREA_BOTTOM;     // ≈ 6.5
+    private const float VIEWPORT_WIDTH = 0.3f;      // 양쪽 30%
 
     public CameraManager()
     {
@@ -45,24 +52,16 @@ public class CameraManager
 
         if (_mainCamera != null && _subCamera != null)
         {
-            // ✅ 원래 카메라 위치 저장 (멀티플레이어 시 기준점)
-            _originalCameraPosition = _mainCamera.transform.position;
-            GameLogger.Success("CameraManager", $"Main_Camera, Sub_Camera 발견 (원래 위치: {_originalCameraPosition})");
+            GameLogger.Success("CameraManager", "Main_Camera, Sub_Camera 발견");
         }
     }
 
     /// <summary>
     /// Client-side Viewport 설정 (Host vs Client)
-    /// 카메라 위치도 각 플레이어의 블록 영역으로 이동
-    ///
-    /// 규칙:
-    /// - 왼쪽 화면 = 내 게임 영역 (직접 플레이)
-    /// - 오른쪽 화면 = 상대방 게임 영역 (관전)
+    /// Orthographic 카메라로 게임 영역만 정확히 렌더링
     /// </summary>
-    /// <param name="localClientId">내 Client ID</param>
     public void SetupViewportsForLocalPlayer(ulong localClientId)
     {
-        // ✅ 카메라가 없으면 자동으로 Initialize 시도 (Client 타이밍 이슈 해결)
         if (_mainCamera == null || _subCamera == null)
         {
             GameLogger.Warning("CameraManager", "카메라가 없음 - Initialize 재시도...");
@@ -71,76 +70,70 @@ public class CameraManager
 
         if (_mainCamera == null || _subCamera == null)
         {
-            GameLogger.Error("CameraManager", "카메라 초기화 실패! Main/Sub 카메라를 찾을 수 없습니다.");
+            GameLogger.Error("CameraManager", "카메라 초기화 실패!");
             return;
         }
 
-        // ✅ 플레이어별 xOffset (_plankSpacing = 15: 카메라 영역 침범 방지)
-        float player0Offset = -15f;  // Player 0 영역 (Host)
-        float player1Offset = +15f;  // Player 1 영역 (Client)
-
-        // localClientId가 0이면 Host, 1이면 Client
+        // ✅ 플레이어별 xOffset
+        float player0Offset = -15f;
+        float player1Offset = +15f;
         bool isHost = (localClientId == 0);
-
-        // ✅ 내 영역과 상대 영역 결정
         float myOffset = isHost ? player0Offset : player1Offset;
         float opponentOffset = isHost ? player1Offset : player0Offset;
 
-        // ✅ 왼쪽 카메라 = 내 영역, 오른쪽 카메라 = 상대 영역
-        // Main_Camera를 왼쪽(내 영역)으로, Sub_Camera를 오른쪽(상대 영역)으로 사용
-        Vector3 mainPos = _originalCameraPosition;
-        mainPos.x = _originalCameraPosition.x + myOffset;  // Main → 내 영역
-        _mainCamera.transform.position = mainPos;
+        // ✅ 양쪽 카메라를 Orthographic으로 전환 (게임 영역만 정확히 보여줌)
+        SetupOrthographicCamera(_mainCamera, myOffset);
+        SetupOrthographicCamera(_subCamera, opponentOffset);
 
-        Vector3 subPos = _originalCameraPosition;
-        subPos.x = _originalCameraPosition.x + opponentOffset;  // Sub → 상대 영역
-        _subCamera.transform.position = subPos;
-        _subCamera.transform.rotation = _mainCamera.transform.rotation;
+        // ✅ Viewport 설정 (양쪽 30%, 전체 높이)
+        _mainCamera.rect = new Rect(0, 0, VIEWPORT_WIDTH, 1f);
+        _subCamera.rect = new Rect(1f - VIEWPORT_WIDTH, 0, VIEWPORT_WIDTH, 1f);
 
-        // ✅ Aspect Ratio 유지 Viewport 설정
-        ApplyAspectRatioViewports();
-
-        GameLogger.Success("CameraManager", $"[Client {localClientId}] Main(왼쪽, 내 영역 x={myOffset}) + Sub(오른쪽, 상대 영역 x={opponentOffset})");
-        GameLogger.Info("CameraManager", $"[DEBUG] Screen: {Screen.width}x{Screen.height}, Main rect: {_mainCamera.rect}, Sub rect: {_subCamera.rect}");
+        GameLogger.Success("CameraManager",
+            $"[Client {localClientId}] Ortho 카메라 설정 완료: Main(x={myOffset}), Sub(x={opponentOffset})");
+        GameLogger.Info("CameraManager",
+            $"[DEBUG] Screen: {Screen.width}x{Screen.height}, OrthoSize={_mainCamera.orthographicSize:F1}");
     }
 
     /// <summary>
-    /// Aspect Ratio를 유지하는 Viewport 설정
-    /// 게임 영역의 비율을 유지하면서 letterbox/pillarbox 적용
+    /// Orthographic 카메라 설정
+    /// 게임 영역의 너비/높이에 맞춰 orthoSize 계산
     /// </summary>
-    private void ApplyAspectRatioViewports()
+    private void SetupOrthographicCamera(Camera cam, float xOffset)
     {
-        // 타겟 게임 비율 (세로형 블록깨기: 9:16 또는 유사)
-        float targetAspect = 9f / 16f;  // 0.5625
+        // Orthographic 전환
+        cam.orthographic = true;
 
-        // 각 뷰포트 영역의 너비 비율 (30%)
-        float viewportWidth = 0.3f;
+        // 뷰포트의 실제 종횡비 계산
+        float viewportPixelWidth = VIEWPORT_WIDTH * Screen.width;
+        float viewportPixelHeight = Screen.height;
+        float viewportAspect = viewportPixelWidth / viewportPixelHeight;
 
-        // 현재 화면 비율
-        float screenAspect = (float)Screen.width / Screen.height;
+        // ✅ orthoSize 계산: 카메라 x범위가 Territory 맵(x=-10.5~+10.5)과 절대 겹치지 않도록
+        // 카메라가 x=±15에 있고, Territory 끝이 x=±10.5
+        // 카메라 x범위 = orthoSize * viewportAspect
+        // 최대 허용 x반폭 = |xOffset| - 10.5 = 15 - 10.5 = 4.5 (약간 여유 주기)
+        float maxHalfWidth = Mathf.Abs(xOffset) - 11.0f; // Territory까지 0.5유닛 여유
+        float maxOrthoSizeByWidth = maxHalfWidth / viewportAspect;
 
-        // 뷰포트 내부의 실제 비율 계산
-        // 뷰포트가 화면의 30%를 차지하므로, 뷰포트 내부 비율 = screenAspect * viewportWidth
-        float viewportAspect = screenAspect * viewportWidth;
+        // 너비 기준: 게임 영역을 채우려면
+        float sizeByWidth = (GAME_AREA_WIDTH / 2f) / viewportAspect;
 
-        float viewportHeight = 1f;
-        float yOffset = 0f;
+        // Territory 겹침 방지를 위해 최대값 제한
+        float orthoSize = Mathf.Min(sizeByWidth, maxOrthoSizeByWidth);
 
-        // ✅ Letterbox 계산 (비율 유지)
-        if (viewportAspect > targetAspect)
-        {
-            // 뷰포트가 타겟보다 넓음 → 높이를 줄여서 letterbox
-            viewportHeight = targetAspect / viewportAspect;
-            yOffset = (1f - viewportHeight) / 2f;
-        }
-        // 뷰포트가 타겟보다 좁으면 → 그대로 사용 (pillarbox는 이미 뷰포트 너비로 처리됨)
+        // 최소 크기 보장 (너무 작으면 게임이 안 보임)
+        orthoSize = Mathf.Max(orthoSize, 2.5f);
 
-        // ✅ Viewport 적용 (왼쪽 30%, 오른쪽 30%, 중앙 40% 빈 공간)
-        _mainCamera.rect = new Rect(0, yOffset, viewportWidth, viewportHeight);
-        _subCamera.rect = new Rect(1f - viewportWidth, yOffset, viewportWidth, viewportHeight);
+        cam.orthographicSize = orthoSize;
 
+        // 카메라 위치: 게임 영역 중심, z는 뒤로 빼기
+        cam.transform.position = new Vector3(xOffset, GAME_CENTER_Y, -10f);
+        cam.transform.rotation = Quaternion.identity;
+
+        float actualHalfWidth = orthoSize * viewportAspect;
         GameLogger.Info("CameraManager",
-            $"Viewport 설정: viewportAspect={viewportAspect:F2}, targetAspect={targetAspect:F2}, height={viewportHeight:F2}, yOffset={yOffset:F2}");
+            $"[Ortho] aspect={viewportAspect:F2}, orthoSize={orthoSize:F1}, xRange=[{xOffset - actualHalfWidth:F1}, {xOffset + actualHalfWidth:F1}]");
     }
 
     /// <summary>
@@ -161,13 +154,6 @@ public class CameraManager
         GameLogger.Info("CameraManager", "Viewport 초기화 완료");
     }
 
-    /// <summary>
-    /// Main Camera 반환
-    /// </summary>
     public Camera GetMainCamera() => _mainCamera;
-
-    /// <summary>
-    /// Sub Camera 반환
-    /// </summary>
     public Camera GetSubCamera() => _subCamera;
 }

@@ -8,7 +8,7 @@
       "env": {
         "LOGGING": "true",
         "LOGGING_FILE": "true",
-        "UNITY_HOST": "localhost"
+        "UNITY_HOST": "127.0.0.1"
       }
     }
   }

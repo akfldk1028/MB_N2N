@@ -46,7 +46,7 @@ MonoBehaviour:
     - PreLoad
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9a04f6dd094dee04da899173ae36d849
-    m_Address: Bullet
+    m_Address: bullet
     m_ReadOnly: 0
     m_SerializedLabels:
     - PreLoad

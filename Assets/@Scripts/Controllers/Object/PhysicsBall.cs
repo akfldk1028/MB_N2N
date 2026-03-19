@@ -174,12 +174,12 @@ namespace Unity.Assets.Scripts.Objects
             }
 
             // ✅ Owner: 발사 입력 처리 (포커스된 에디터에서만)
-            if (IsSpawned && IsOwner && CurrentState == EBallState.Ready)
+            if (CurrentState == EBallState.Ready && (!IsSpawned || IsOwner))
             {
                 if (Application.isFocused)
                 {
-                    // 스페이스바로 발사 (ServerRpc로 전송)
-                    if (Input.GetKeyDown(KeyCode.Space))
+                    // 스페이스바 또는 마우스 클릭으로 발사 (ServerRpc로 전송)
+                    if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0))
                     {
                         RequestLaunchServerRpc();
                     }

@@ -539,6 +539,10 @@ namespace Unity.Assets.Scripts.Network
                 m_CurrentState?.Exit();
                 m_CurrentState = m_StartingHost; // OnServerStarted에서 m_Hosting으로 전환하기 위해
 
+                // MPPM 로컬 테스트: ForceSamePrefabs 비활성화 (런타임 프리팹 등록 허용)
+                NetworkManager.NetworkConfig.ForceSamePrefabs = false;
+                GameLogger.Info("ConnectionManagerEx", "[MPPM] ForceSamePrefabs 비활성화");
+
                 bool started = NetworkManager.StartHost();
                 if (started)
                 {
@@ -612,6 +616,9 @@ namespace Unity.Assets.Scripts.Network
                     transport.SetConnectionData("127.0.0.1", 7777);
                     GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 재설정: Connect 127.0.0.1:7777");
                 }
+
+                // MPPM 로컬 테스트: ForceSamePrefabs 비활성화
+                NetworkManager.NetworkConfig.ForceSamePrefabs = false;
 
                 m_CurrentState?.Exit();
                 m_CurrentState = m_ClientConnecting;

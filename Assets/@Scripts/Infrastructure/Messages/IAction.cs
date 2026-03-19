@@ -43,7 +43,8 @@ namespace MB.Infrastructure.Messages
         BrickGame_GameOver,          // 게임 오버 (대포 파괴됨)
         BrickGame_GameEnded,         // 게임 종료 (승자/패자 결정됨)
         BrickGame_PowerUpCollected,  // 파워업 아이템 획득
-        BrickGame_ComponentChargeChanged  // 컴포넌트 게이지 충전 변경 (Bomb/Harvest)
+        BrickGame_ComponentChargeChanged,  // 컴포넌트 게이지 충전 변경 (Bomb/Harvest)
+        BrickGame_BallBounce              // 볼 바운스 VFX (충돌 이펙트)
     }
 
     public interface IActionPayload { }
@@ -186,6 +187,34 @@ namespace MB.Infrastructure.Messages
             CurrentCharge = currentCharge;
             MaxCharge = maxCharge;
             Ratio = ratio;
+        }
+    }
+
+    /// <summary>
+    /// 볼 바운스 VFX 이벤트
+    /// </summary>
+    public readonly struct BallBounceVFXPayload : IActionPayload
+    {
+        public Vector3 Position { get; }
+
+        public BallBounceVFXPayload(Vector3 position)
+        {
+            Position = position;
+        }
+    }
+
+    /// <summary>
+    /// 벽돌 파괴 VFX 이벤트 (벽돌 색상 포함)
+    /// </summary>
+    public readonly struct BrickDestroyedVFXPayload : IActionPayload
+    {
+        public Vector3 Position { get; }
+        public Color BrickColor { get; }
+
+        public BrickDestroyedVFXPayload(Vector3 position, Color brickColor)
+        {
+            Position = position;
+            BrickColor = brickColor;
         }
     }
 

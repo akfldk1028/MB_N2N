@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// MCP Unity 서버가 Play 모드에서 끊기는 문제 패치 v2.
@@ -118,14 +119,19 @@ public static class McpPlayModeRestart
         RemovePackagePlayModeHandler();
         RemovePackageAssemblyReloadHandler();
 
-        bool listening = IsServerListening();
-        Debug.Log($"[MCP Patch v2] Assembly reload 완료, IsListening={listening}");
+        // ★ 리컴파일 후 항상 서버 강제 재시작 (좀비 연결 정리)
+        Debug.Log("[MCP Patch v2] Assembly reload 완료 → 서버 강제 재시작");
+        ForceRestartServer();
 
-        if (!listening)
+        // 안전망: delayCall로 한번 더 확인
+        EditorApplication.delayCall += () =>
         {
-            Debug.Log("[MCP Patch v2] Assembly reload 후 서버 재시작");
-            TryStartServer();
-        }
+            if (!IsServerListening())
+            {
+                Debug.Log("[MCP Patch v2] Assembly reload 후 지연 재시작");
+                ForceRestartServer();
+            }
+        };
     }
 
     /// <summary>
@@ -178,7 +184,7 @@ public static class McpPlayModeRestart
                 break;
 
             case PlayModeStateChange.ExitingPlayMode:
-                // 서버 유지
+                // 서버 유지 (NetworkManager 정리는 EnteredEditMode에서 — Burst job 충돌 방지)
                 Debug.Log("[MCP Patch v2] ExitingPlayMode - 서버 유지");
                 break;
 
@@ -191,6 +197,28 @@ public static class McpPlayModeRestart
                     EditorApplication.delayCall += RetryStartIfNeeded;
                 }
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Play 종료 전에 NetworkManager를 정상 shutdown하여 소켓 좀비 방지.
+    /// 공식 문서: NetworkDriver.Disconnect → update job 실행 → Dispose 순서 준수.
+    /// </summary>
+    private static void CleanupNetworkBeforeExit()
+    {
+        try
+        {
+            var networkManager = NetworkManager.Singleton;
+            if (networkManager != null && networkManager.IsListening)
+            {
+                Debug.Log($"[MCP Patch v2] NetworkManager Shutdown 시작 (IsServer={networkManager.IsServer}, IsClient={networkManager.IsClient})");
+                networkManager.Shutdown(true); // discardMessageQueue=true → 즉시 정리
+                Debug.Log("[MCP Patch v2] NetworkManager Shutdown 완료");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[MCP Patch v2] NetworkManager Shutdown 실패 (무시): {e.Message}");
         }
     }
 
@@ -248,6 +276,71 @@ public static class McpPlayModeRestart
     private static Type GetServerType()
     {
         return Type.GetType("McpUnity.Unity.McpUnityServer, McpUnity.Editor");
+    }
+
+    /// <summary>
+    /// 서버를 Stop→Start로 강제 재시작. 좀비 WebSocket 연결을 정리.
+    /// </summary>
+    private static void ForceRestartServer()
+    {
+        ResetMPPMCloneDetectionCache();
+
+        var serverType = GetServerType();
+        if (serverType == null) return;
+
+        var instanceProp = serverType.GetProperty("Instance",
+            BindingFlags.Public | BindingFlags.Static);
+        if (instanceProp == null) return;
+
+        var instance = instanceProp.GetValue(null);
+        if (instance == null) return;
+
+        // StopServer 호출 (좀비 연결 정리)
+        // 시그니처: StopServer(ushort? closeCode = null, string closeReason = null)
+        try
+        {
+            var stopMethod = serverType.GetMethod("StopServer",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(ushort?), typeof(string) }, null);
+            if (stopMethod != null)
+            {
+                stopMethod.Invoke(instance, new object[] { (ushort?)4001, "ForceRestart" });
+                Debug.Log("[MCP Patch v2] StopServer(4001) 호출 → 좀비 연결 정리");
+            }
+            else
+            {
+                // 파라미터 없는 버전 시도
+                var stopNoArgs = serverType.GetMethod("StopServer",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, Type.EmptyTypes, null);
+                if (stopNoArgs != null)
+                {
+                    stopNoArgs.Invoke(instance, null);
+                    Debug.Log("[MCP Patch v2] StopServer() 호출 → 좀비 연결 정리");
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[MCP Patch v2] StopServer 실패: {e.Message}");
+        }
+
+        // StartServer 호출
+        try
+        {
+            var startMethod = serverType.GetMethod("StartServer",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, Type.EmptyTypes, null);
+            if (startMethod != null)
+            {
+                startMethod.Invoke(instance, null);
+                Debug.Log($"[MCP Patch v2] ForceRestart 완료, IsListening={IsServerListening()}");
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[MCP Patch v2] StartServer 실패: {e.Message}");
+        }
     }
 
     private static void TryStartServer()

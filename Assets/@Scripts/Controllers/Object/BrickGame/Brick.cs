@@ -67,6 +67,9 @@ namespace Unity.Assets.Scripts.Objects
             
             // 색상 업데이트
             ColorBrick();
+
+            // BrickManager에 등록
+            Managers.Game?.BrickGame?.Brick?.RegisterBrick(this);
         }
         
         // PhysicsObject에서 상속받은 Update 또는 FixedUpdate 사용
@@ -254,6 +257,9 @@ namespace Unity.Assets.Scripts.Objects
         /// </summary>
         private void HandleBrickDestruction()
         {
+            // BrickManager에 파괴 통보
+            Managers.Game?.BrickGame?.Brick?.NotifyBrickDestroyed(this, originalWave);
+
             // 업적 및 점수 추적
             int bricksDestroyed = PlayerPrefs.GetInt("numberOfBricksDestroyed", 0) + 1;
             PlayerPrefs.SetInt("numberOfBricksDestroyed", bricksDestroyed);

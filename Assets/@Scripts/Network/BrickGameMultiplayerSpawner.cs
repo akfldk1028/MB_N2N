@@ -223,27 +223,52 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     /// </summary>
     private void FindBoundaries()
     {
-        // "LeftEnd", "RightEnd", "TopBorder" GameObject 찾기 (BrickGame 씬 구조)
-        _leftBoundary = GameObject.Find("LeftEnd")?.transform;
-        _rightBoundary = GameObject.Find("RightEnd")?.transform;
-        _topBoundary = GameObject.Find("TopBorder")?.transform;
+        // "LeftEnd", "RightEnd", "TopEnd" GameObject 찾기 (BrickGame 씬 구조)
+        var sceneLeft = GameObject.Find("LeftEnd")?.transform;
+        var sceneRight = GameObject.Find("RightEnd")?.transform;
+        var sceneTop = GameObject.Find("TopEnd")?.transform;
 
-        if (_leftBoundary == null || _rightBoundary == null)
+        if (sceneLeft != null && sceneRight != null)
+        {
+            // ✅ 씬 경계에서 게임 영역 크기 계산 후, 원점 중심으로 재배치
+            // (씬의 BrickGame이 원점에서 벗어나 있어도 멀티플레이어 카메라와 정렬됨)
+            float gameWidth = sceneRight.position.x - sceneLeft.position.x;
+            float halfWidth = gameWidth / 2f;
+            float boundaryY = sceneLeft.position.y;
+
+            var left = new GameObject("LeftBound_MP");
+            left.transform.position = new Vector3(-halfWidth, boundaryY, 0);
+            _leftBoundary = left.transform;
+
+            var right = new GameObject("RightBound_MP");
+            right.transform.position = new Vector3(halfWidth, boundaryY, 0);
+            _rightBoundary = right.transform;
+
+            GameLogger.Success("BrickGameMultiplayerSpawner",
+                $"경계 원점 중심 재배치: 씬({sceneLeft.position.x:F1}~{sceneRight.position.x:F1}) → MP({-halfWidth:F1}~{halfWidth:F1}), Y={boundaryY:F1}");
+        }
+        else
         {
             GameLogger.Warning("BrickGameMultiplayerSpawner", "경계(LeftEnd/RightEnd)를 찾을 수 없습니다. 기본값 사용");
-            // 기본값 생성
             var left = new GameObject("LeftEnd_Auto");
-            left.transform.position = new Vector3(-8f, _plankYPosition, 0);
+            left.transform.position = new Vector3(-3.6f, _plankYPosition, 0);
             _leftBoundary = left.transform;
 
             var right = new GameObject("RightEnd_Auto");
-            right.transform.position = new Vector3(8f, _plankYPosition, 0);
+            right.transform.position = new Vector3(3.6f, _plankYPosition, 0);
             _rightBoundary = right.transform;
         }
 
-        if (_topBoundary == null)
+        if (sceneTop != null)
         {
-            GameLogger.Warning("BrickGameMultiplayerSpawner", "TopBorder를 찾을 수 없습니다. 기본값 사용");
+            // ✅ Top도 원점 중심으로 재배치 (Y만 사용)
+            var top = new GameObject("TopBound_MP");
+            top.transform.position = new Vector3(0, sceneTop.position.y, 0);
+            _topBoundary = top.transform;
+        }
+        else
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", "TopEnd를 찾을 수 없습니다. 기본값 사용");
             var top = new GameObject("TopBorder_Auto");
             top.transform.position = new Vector3(0, 4f, 0);
             _topBoundary = top.transform;

@@ -139,33 +139,40 @@ public class UI_StartUpScene : UI_Scene
     {
         GameLogger.Progress("UI_StartUpScene", "[MPPM] 로컬 직접 연결 모드 시작");
 
-        // Managers 전체 초기화 완료 대기
+        // Managers 초기화 + NetworkManager + Transport + NetworkPrefabs 전부 대기
         float waitTime = 0f;
-        while (!Managers.Initialized && waitTime < 30f)
+        Unity.Netcode.Transports.UTP.UnityTransport transport = null;
+        while (waitTime < 30f)
         {
+            bool ready = Managers.Initialized
+                && Managers.Network != null
+                && Managers.Connection != null;
+
+            if (ready)
+            {
+                transport = Managers.Network.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+                // NetworkPrefabs가 로드될 때까지 대기 (ConfigureNetworkManager async 완료 대기)
+                if (transport != null && Managers.Network.NetworkConfig?.Prefabs?.NetworkPrefabsLists?.Count > 0)
+                    break;
+            }
+
             await Task.Delay(200);
             waitTime += 0.2f;
+
+            if (waitTime % 3f < 0.2f)
+                GameLogger.Info("UI_StartUpScene", $"[MPPM] 초기화 대기 중... ({waitTime:F1}초)");
         }
-        if (!Managers.Initialized)
+
+        if (transport == null || Managers.Network == null)
         {
-            GameLogger.Error("UI_StartUpScene", "[MPPM] Managers 초기화 타임아웃 (30초)");
+            GameLogger.Error("UI_StartUpScene", $"[MPPM] 초기화 타임아웃 (30초) - Network={Managers.Network != null}, Transport={transport != null}");
             return;
         }
-        GameLogger.Success("UI_StartUpScene", $"[MPPM] Managers 초기화 완료 ({waitTime:F1}초 대기)");
+        GameLogger.Success("UI_StartUpScene", $"[MPPM] 네트워크 초기화 완료 ({waitTime:F1}초 대기, Prefabs={Managers.Network.NetworkConfig?.Prefabs?.NetworkPrefabsLists?.Count ?? 0})");
 
         // 멀티플레이어 모드 설정 (2인)
         Managers.GameMode.SetMultiplayerMode();
         GameLogger.Success("UI_StartUpScene", "[MPPM] 게임 모드: 멀티플레이어 (2인)");
-
-        // Transport 확인
-        var transport = Managers.Network?.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-        if (transport == null)
-            transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
-        if (transport == null)
-        {
-            GameLogger.Error("UI_StartUpScene", "[MPPM] UnityTransport를 찾을 수 없음");
-            return;
-        }
 
         bool isMainEditor = Unity.Multiplayer.Playmode.CurrentPlayer.IsMainEditor;
 

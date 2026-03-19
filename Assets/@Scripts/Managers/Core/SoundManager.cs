@@ -229,7 +229,10 @@ public class SoundManager
     {
         StopBGM();
         foreach (var src in _sfxSources)
-            src.Stop();
+        {
+            if (src != null)
+                src.Stop();
+        }
 
         _clipCache.Clear();
         _loadingKeys.Clear();
