@@ -361,10 +361,16 @@ public class PhysicsPlank : PhysicsObject
         {
             if (IsOwner)
             {
-                // ✅ 포커스 체크: ParrelSync 환경에서 다른 에디터 입력 무시
-                if (Application.isFocused)
+                // ✅ Owner: 직접 Input 처리
+                // MPPM 에디터에서는 isFocused 체크 완화 (클론 에디터도 입력 받음)
+                #if UNITY_EDITOR
+                bool canInput = true;
+                #else
+                bool canInput = Application.isFocused;
+                #endif
+
+                if (canInput)
                 {
-                    // ✅ Owner: 직접 Input 처리
                     float horizontal = Input.GetAxisRaw("Horizontal");
                     if (Mathf.Abs(horizontal) > 0.01f)
                     {

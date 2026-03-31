@@ -610,33 +610,32 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     {
         Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
         if (rb == null) rb = obj.AddComponent<Rigidbody2D>();
-        
+
         rb.gravityScale = 0;
-        rb.isKinematic = true;
+        // isKinematic 설정 제거 — 프리팹에서 이미 Kinematic
+        // NetworkRigidbody2D가 bodyType 관리하므로 런타임에 변경하면 동기화 깨짐
     }
     
     private IEnumerator MoveObjectToTargetY(GameObject obj, float targetY)
     {
         if (obj == null) yield break;
-        
-        Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
-        if (rb == null) yield break;
 
+        // transform.position 직접 변경 → NetworkTransform이 Client에 자동 동기화
         while (obj != null && Mathf.Abs(obj.transform.position.y - targetY) > 0.01f)
         {
             Vector3 pos = obj.transform.position;
             float step = movingDownStep * Time.fixedDeltaTime * 50;
             pos.y = Mathf.MoveTowards(pos.y, targetY, step);
 
-            rb.MovePosition(pos);
+            obj.transform.position = pos;
             yield return new WaitForFixedUpdate();
         }
 
         if (obj != null)
         {
-            Vector3 finalPos = obj.transform.position; 
+            Vector3 finalPos = obj.transform.position;
             finalPos.y = targetY;
-            rb.MovePosition(finalPos);
+            obj.transform.position = finalPos;
 
             if (activeObjectData.ContainsKey(obj))
             {
@@ -725,19 +724,17 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     private IEnumerator MoveDown(GameObject obj, float targetY)
     {
         if (obj == null) yield break;
-        
-        Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
-        if (rb == null) yield break;
-        
+
+        // transform.position 직접 변경 → NetworkTransform이 감지하여 Client에 자동 동기화
         while (obj != null && obj.transform.position.y > targetY)
         {
             Vector3 pos = obj.transform.position;
             pos.y -= movingDownStep;
-            
+
             if (pos.y <= targetY)
                 pos.y = targetY;
-                
-            rb.MovePosition(pos);
+
+            obj.transform.position = pos;
             yield return new WaitForFixedUpdate();
         }
     }

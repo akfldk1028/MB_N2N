@@ -176,7 +176,14 @@ namespace Unity.Assets.Scripts.Objects
             // ✅ Owner: 발사 입력 처리 (포커스된 에디터에서만)
             if (CurrentState == EBallState.Ready && (!IsSpawned || IsOwner))
             {
-                if (Application.isFocused)
+                // MPPM 에디터에서는 isFocused 체크 완화
+                #if UNITY_EDITOR
+                bool canInput = true;
+                #else
+                bool canInput = Application.isFocused;
+                #endif
+
+                if (canInput)
                 {
                     // 스페이스바 또는 마우스 클릭으로 발사 (ServerRpc로 전송)
                     if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0))
