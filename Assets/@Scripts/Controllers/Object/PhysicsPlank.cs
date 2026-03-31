@@ -52,11 +52,6 @@ public class PhysicsPlank : PhysicsObject
 
     void Start()
     {
-        // BrickGame 레이어 설정 (Territory 카메라에서 제외)
-        int brickLayer = LayerMask.NameToLayer("BrickGame");
-        if (brickLayer >= 0)
-            gameObject.layer = brickLayer;
-
         // ✅ 네트워크 모드에서는 OnNetworkSpawn()에서 초기화하므로 스킵
         // (멀티플레이어에서 경계가 잘못 설정되는 것 방지)
         var netObj = GetComponent<Unity.Netcode.NetworkObject>();
