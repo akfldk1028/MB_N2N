@@ -85,12 +85,9 @@ namespace Unity.Assets.Scripts.Objects
             _networkOpType.OnValueChanged += (prev, cur) => { operatorType = (OperatorType)cur; UpdateVisual(); };
             _networkOpValue.OnValueChanged += (prev, cur) => { operatorValue = cur; UpdateVisual(); };
 
-            // 초기 동기화 값 적용 (Client에서 이미 복제된 값)
-            if (_networkOpType.Value != 0 || _networkOpValue.Value != 2)
-            {
-                operatorType = (OperatorType)_networkOpType.Value;
-                operatorValue = _networkOpValue.Value;
-            }
+            // 초기 동기화 값 적용 (Client에서 이미 복제된 값 — 항상 적용)
+            operatorType = (OperatorType)_networkOpType.Value;
+            operatorValue = _networkOpValue.Value;
 
             // 비주얼 업데이트
             UpdateVisual();

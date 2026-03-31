@@ -487,7 +487,7 @@ namespace Unity.Assets.Scripts.Network
 
         /// <summary>
         /// MPPM 로컬 테스트용 직접 Host 시작
-        /// Unity Services 인증 없이 127.0.0.1:7777로 직접 호스팅
+        /// Unity Services 인증 없이 127.0.0.1:7778로 직접 호스팅
         /// ConnectionPayload를 설정하여 ApprovalCheck 통과
         /// </summary>
         public void StartHostDirect(string playerName)
@@ -564,7 +564,7 @@ namespace Unity.Assets.Scripts.Network
 
         /// <summary>
         /// MPPM 로컬 테스트용 직접 Client 시작
-        /// Unity Services 인증 없이 127.0.0.1:7777로 직접 연결
+        /// Unity Services 인증 없이 127.0.0.1:7778로 직접 연결
         /// ConnectionPayload를 설정하여 ApprovalCheck 통과
         /// </summary>
         public void StartClientDirect(string playerName)
@@ -577,14 +577,14 @@ namespace Unity.Assets.Scripts.Network
                 return;
             }
 
-            // UnityTransport 설정 — Client는 127.0.0.1:7777로 연결
+            // UnityTransport 설정 — Client는 127.0.0.1:7778로 연결
             var transport = m_NetworkManager.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
             if (transport == null)
                 transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
             if (transport != null)
             {
                 transport.SetConnectionData("127.0.0.1", 7778);
-                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7777");
+                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7778");
             }
             else
             {
@@ -616,7 +616,7 @@ namespace Unity.Assets.Scripts.Network
                 if (transport != null)
                 {
                     transport.SetConnectionData("127.0.0.1", 7778);
-                    GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7777");
+                    GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7778");
                 }
 
                 // MPPM 로컬 테스트: ForceSamePrefabs 비활성화

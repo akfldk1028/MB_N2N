@@ -179,47 +179,29 @@ namespace Unity.Assets.Scripts.Objects
         // 공과 충돌 시 처리
         protected virtual void HandleBallCollision(Collision2D collision)
         {
+            // ✅ 서버 권한: Client는 충돌 처리 스킵 (OnWaveChanged로 비주얼 동기화)
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsListening && !nm.IsServer)
+                return;
+
             // ✅ 멀티플레이어: 소유권 확인
             if (!CheckOwnership(collision.gameObject))
-            {
-                // 소유권이 다른 플레이어의 공이면 충돌 무시
                 return;
-            }
 
-            // 효과음 재생 (필요한 경우)
-            /*
-            if (brickHitSound != null && !brickHitSound.isPlaying)
-            {
-                brickHitSound.Play();
-            }
-            */
-
-            // 체력(wave) 감소 및 시각적 업데이트
-            // wave--;
-                // PhysicsBall 컴포넌트 참조 얻기
             PhysicsBall ball = collision.gameObject.GetComponent<PhysicsBall>();
-
-            // 현재 공의 공격력 (없으면 기본값 1 사용)
             int attackPower = ball != null ? ball.AttackPower : 1;
-            
-            // 체력(wave) 감소 - 공격력만큼 차감 (서버 권한)
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
-                _networkWave.Value -= attackPower;
+
+            // 서버: NetworkVariable로 wave 감소 → Client에 자동 동기화
+            _networkWave.Value -= attackPower;
             wave = _networkWave.Value;
 
             ColorBrick();
-
             if (waveText != null)
-            {
                 waveText.text = wave.ToString();
-            }
 
-            // 체력이 0이 되면 벽돌 파괴
             if (wave <= 0)
             {
-                // ✅ 원래 wave 값에 따른 점수 추가 (플레이어별)
                 AddScoreToPlayer(originalWave);
-
                 HandleBrickDestruction();
                 DestroyBrickSafely();
             }
@@ -259,9 +241,12 @@ namespace Unity.Assets.Scripts.Objects
         {
             if (damage <= 0) return;
 
-            // 서버 권한으로 wave 감소
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
-                _networkWave.Value -= damage;
+            // ✅ 서버 권한: Client는 스킵 (OnWaveChanged로 동기화)
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsListening && !nm.IsServer)
+                return;
+
+            _networkWave.Value -= damage;
             wave = _networkWave.Value;
             ColorBrick();
 

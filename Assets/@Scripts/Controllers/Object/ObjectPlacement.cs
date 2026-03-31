@@ -647,56 +647,80 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     
     private void MoveDownAllObjects()
     {
-        // 전체 너비를 기준으로 블록 크기 계산
+        // ✅ 서버에서만 이동 (Client는 NetworkTransform으로 자동 동기화)
+        var nm = NetworkManager.Singleton;
+        if (nm != null && nm.IsListening && !nm.IsServer)
+            return;
+
         float totalWidth = rightBorder.position.x - leftBorder.position.x;
         Vector3 objectScale = CalculateObjectScale(totalWidth);
         float exactMoveDistance = objectScale.y;
 
-        // ✅ activeObjectData 대신 씬의 모든 벽돌을 X 범위로 필터링하여 이동
-        // (NetworkObject 복제 후 activeObjectData에서 누락된 벽돌도 포함)
         float leftX = leftBorder.position.x + (_isMultiplayerMode ? _xOffset : 0);
         float rightX = rightBorder.position.x + (_isMultiplayerMode ? _xOffset : 0);
 
-        var allBricks = FindObjectsByType<Transform>(FindObjectsSortMode.None);
+        // ✅ 타입 기반 검색 (성능 + 안전성)
+        var bricks = FindObjectsByType<Unity.Assets.Scripts.Objects.Brick>(FindObjectsSortMode.None);
+        var opBricks = FindObjectsByType<Unity.Assets.Scripts.Objects.OperatorBrick>(FindObjectsSortMode.None);
+
         int moved = 0;
+        moved += MoveDownObjects(bricks, leftX, rightX, exactMoveDistance);
+        moved += MoveDownObjects(opBricks, leftX, rightX, exactMoveDistance);
 
-        foreach (var t in allBricks)
+        // star/bonusBall도 activeObjectData로 추적
+        var keysToRemove = activeObjectData.Keys.Where(k => k == null).ToList();
+        foreach (var key in keysToRemove) activeObjectData.Remove(key);
+
+        // activeObjectData에 남은 non-brick 오브젝트 (star, bonusBall 등)
+        foreach (var pair in activeObjectData.ToList())
         {
-            if (t == null) continue;
-            // 스폰된 오브젝트만 (brick, operatorBrick, star, bonusBall 등)
-            if (!t.name.Contains("(Clone)")) continue;
-            // 게임 오브젝트가 아닌 것 제외 (Plank, Ball, Turret, UI 등)
-            if (t.name.Contains("Plank") || t.name.Contains("Ball_") || t.name.Contains("Turret") || t.name.Contains("Bullet")) continue;
-
-            // X 범위로 이 ObjectPlacement 소속 벽돌인지 확인
-            float x = t.position.x;
+            if (pair.Key == null) continue;
+            float x = pair.Key.transform.position.x;
             if (x < leftX - 1f || x > rightX + 1f) continue;
+            // brick/operatorBrick이 아닌 것만 (이미 위에서 처리)
+            if (pair.Key.GetComponent<Unity.Assets.Scripts.Objects.Brick>() != null) continue;
+            if (pair.Key.GetComponent<Unity.Assets.Scripts.Objects.OperatorBrick>() != null) continue;
 
-            float newY = t.position.y - exactMoveDistance;
-
+            float newY = pair.Key.transform.position.y - exactMoveDistance;
             if (newY < BottomBoundary)
             {
-                // 서버에서만 파괴
-                var nm = NetworkManager.Singleton;
-                if (nm != null && nm.IsServer)
-                {
-                    var no = t.GetComponent<NetworkObject>();
-                    if (no != null && no.IsSpawned) no.Despawn();
-                    else Destroy(t.gameObject);
-                }
+                var no = pair.Key.GetComponent<NetworkObject>();
+                if (no != null && no.IsSpawned) no.Despawn();
+                else Destroy(pair.Key);
             }
             else
             {
-                StartCoroutine(MoveDown(t.gameObject, newY));
+                StartCoroutine(MoveDown(pair.Key, newY));
                 moved++;
             }
         }
 
-        // activeObjectData도 정리 (null 제거)
-        var keysToRemove = activeObjectData.Keys.Where(k => k == null).ToList();
-        foreach (var key in keysToRemove) activeObjectData.Remove(key);
-
         GameLogger.Info("ObjectPlacement", $"🔽 MoveDown: {moved}개 이동 (X범위: {leftX:F1}~{rightX:F1})");
+    }
+
+    private int MoveDownObjects<T>(T[] objects, float leftX, float rightX, float moveDistance) where T : Component
+    {
+        int moved = 0;
+        foreach (var obj in objects)
+        {
+            if (obj == null) continue;
+            float x = obj.transform.position.x;
+            if (x < leftX - 1f || x > rightX + 1f) continue;
+
+            float newY = obj.transform.position.y - moveDistance;
+            if (newY < BottomBoundary)
+            {
+                var no = obj.GetComponent<NetworkObject>();
+                if (no != null && no.IsSpawned) no.Despawn();
+                else Destroy(obj.gameObject);
+            }
+            else
+            {
+                StartCoroutine(MoveDown(obj.gameObject, newY));
+                moved++;
+            }
+        }
+        return moved;
     }
     private IEnumerator MoveDown(GameObject obj, float targetY)
     {
