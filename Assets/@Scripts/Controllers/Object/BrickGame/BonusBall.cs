@@ -238,33 +238,26 @@ namespace Unity.Assets.Scripts.Objects
                 newBallObj.tag = "Ball";
             }
 
-            // 3. 네트워크 스폰 (서버인 경우)
+            // 3. PhysicsBall 설정 (Spawn 전에!)
+            PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
+            if (plank != null && newBall != null)
+            {
+                newBall.SetPlankReference(plank);
+            }
+
+            // 4. 네트워크 스폰 (Configure → Spawn 순서)
             if (isServer)
             {
                 var netObj = newBallObj.GetComponent<NetworkObject>();
-                if (netObj != null)
-                {
-                    netObj.Spawn();
-                    Debug.Log($"<color=green>[BonusBall] 네트워크 공 스폰 완료: {newBallObj.name}</color>");
-                }
+                MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(netObj);
             }
 
-            // 4. PhysicsBall 컴포넌트 초기화 및 발사
-            PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
+            // 5. 발사 (Spawn 후 — 물리 적용)
             if (newBall != null)
             {
-                // 플랭크 참조 설정
-                if (plank != null)
-                {
-                    newBall.SetPlankReference(plank);
-                }
-
-                // 무작위 방향 생성 (위쪽 + 좌우 랜덤)
                 float randomAngle = UnityEngine.Random.Range(-45f, 45f);
                 Vector2 launchDir = Quaternion.Euler(0, 0, randomAngle) * baseDirection;
                 launchDir.Normalize();
-
-                // 발사
                 newBall.LaunchBall(launchDir);
 
                 Debug.Log($"<color=yellow>[BonusBall] 보너스 공 발사! 방향: {launchDir}</color>");

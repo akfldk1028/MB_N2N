@@ -242,28 +242,23 @@ namespace Unity.Assets.Scripts.Objects
                 newBallObj.tag = "Ball";
             }
 
-            // 네트워크 스폰 (서버)
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
-            {
-                var netObj = newBallObj.GetComponent<NetworkObject>();
-                if (netObj != null)
-                {
-                    netObj.Spawn();
-                    Debug.Log($"<color=green>[PowerUpItem] 보너스 공 네트워크 스폰 완료: {newBallObj.name}</color>");
-                }
-            }
-
-            // PhysicsBall 초기화 및 발사
+            // PhysicsBall 설정 (Spawn 전에!)
             PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
             if (newBall != null)
             {
                 newBall.SetPlankReference(plank);
+            }
 
-                // 무작위 방향 (위쪽 + 좌우 랜덤)
+            // Configure → Spawn
+            var netObj = newBallObj.GetComponent<NetworkObject>();
+            MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(netObj);
+
+            // 발사 (Spawn 후 — 물리 적용)
+            if (newBall != null)
+            {
                 float randomAngle = Random.Range(-45f, 45f);
                 Vector2 launchDir = Quaternion.Euler(0, 0, randomAngle) * Vector2.up;
                 launchDir.Normalize();
-
                 newBall.LaunchBall(launchDir);
 
                 Debug.Log($"<color=cyan>[PowerUpItem] BonusBall 효과 - 보너스 공 발사! 방향: {launchDir}</color>");
@@ -290,27 +285,20 @@ namespace Unity.Assets.Scripts.Objects
                 newBallObj.tag = "Ball";
             }
 
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
+            if (newBall != null && existingBall.Plank != null)
             {
-                var netObj = newBallObj.GetComponent<NetworkObject>();
-                if (netObj != null)
-                {
-                    netObj.Spawn();
-                }
+                newBall.SetPlankReference(existingBall.Plank);
             }
 
-            PhysicsBall newBall = newBallObj.GetComponent<PhysicsBall>();
+            var netObj2 = newBallObj.GetComponent<NetworkObject>();
+            MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(netObj2);
+
             if (newBall != null)
             {
-                if (existingBall.Plank != null)
-                {
-                    newBall.SetPlankReference(existingBall.Plank);
-                }
-
                 float randomAngle = Random.Range(-45f, 45f);
                 Vector2 launchDir = Quaternion.Euler(0, 0, randomAngle) * Vector2.up;
                 launchDir.Normalize();
-
                 newBall.LaunchBall(launchDir);
             }
         }

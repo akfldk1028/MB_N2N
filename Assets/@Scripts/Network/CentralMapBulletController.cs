@@ -648,16 +648,17 @@ public class CentralMapBulletController : NetworkBehaviour
             // ✅ NetworkObject Spawn
             if (netObj == null) continue;
 
-            // ✅ Spawn 전에 SetOwner/Fire 호출 (NV를 Spawn 전에 설정해야 Client가 올바른 값 수신)
+            // Configure → Spawn (NV를 Spawn 전에 설정)
             CannonBullet bulletScript = bullet.GetComponent<CannonBullet>();
-            if (bulletScript != null)
+            MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(netObj, go =>
             {
-                if (fromPool) bulletScript.ResetForReuse();
-                bulletScript.SetOwner(cannon, cannon.playerColor, cannon.playerID);
-                bulletScript.Fire(direction, bulletSpeed);
-            }
-
-            netObj.Spawn();
+                if (bulletScript != null)
+                {
+                    if (fromPool) bulletScript.ResetForReuse();
+                    bulletScript.SetOwner(cannon, cannon.playerColor, cannon.playerID);
+                    bulletScript.Fire(direction, bulletSpeed);
+                }
+            });
 
             // ✅ 프레임당 N발 발사 후 다음 프레임 대기 (기관총 효과: 다다다다닥!)
             // - 매 프레임 소량씩 Spawn → 네트워크 부하 분산 → 렉 없음!

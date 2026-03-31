@@ -571,29 +571,18 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
         }
 
         // ✅ NetworkObject Spawn 처리 (멀티플레이어 동기화)
+        // Configure → Spawn (유틸 사용)
         var networkObject = newObject.GetComponent<NetworkObject>();
         if (networkObject != null)
         {
-            var networkManager = NetworkManager.Singleton;
-            if (networkManager != null && networkManager.IsServer)
+            if (_isMultiplayerMode)
             {
-                if (_isMultiplayerMode)
-                {
-                    // 멀티플레이어: Owner 지정
-                    networkObject.SpawnWithOwnership(_ownerClientId);
-                    GameLogger.Success("ObjectPlacement", $"[Player {_ownerClientId}] NetworkObject Spawn 완료: {newObject.name}");
-                }
-                else
-                {
-                    // 싱글플레이어: 일반 Spawn
-                    networkObject.Spawn();
-                    GameLogger.Success("ObjectPlacement", $"NetworkObject Spawn 완료: {newObject.name}");
-                }
+                MB.Infrastructure.Network.NetworkSpawnUtil.SpawnWithOwner(networkObject, _ownerClientId);
             }
-        }
-        else
-        {
-            GameLogger.Warning("ObjectPlacement", $"NetworkObject 컴포넌트가 없습니다: {prefabToSpawn.name} (싱글플레이어 모드)");
+            else
+            {
+                MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(networkObject);
+            }
         }
 
         SetupRigidbody(newObject);

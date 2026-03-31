@@ -726,13 +726,9 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
         // 터렛 생성 (SERVER 또는 싱글플레이어만)
         GameObject turretGO = Instantiate(prefab, position, Quaternion.identity, parent);
 
-        // ✅ 멀티플레이어: NetworkObject가 있으면 Spawn (서버만)
+        // ✅ 멀티플레이어: NetworkObject Spawn (유틸 사용)
         var networkObject = turretGO.GetComponent<Unity.Netcode.NetworkObject>();
-        if (networkObject != null && netManager != null && netManager.IsServer)
-        {
-            networkObject.Spawn();
-            Debug.Log($"<color=magenta>[IsometricGridGenerator] 터렛 NetworkObject.Spawn() 완료 (playerID={playerID})</color>");
-        }
+        MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(networkObject);
         
         // Cannon 컴포넌트 확인 및 리스트에 추가
         Cannon cannon = turretGO.GetComponent<Cannon>();

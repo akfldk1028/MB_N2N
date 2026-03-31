@@ -210,19 +210,13 @@ public class BrickGameBulletSpawner : NetworkBehaviour
         bulletObj.SetActive(true);
         bulletObj.name = $"Bullet_P{ownerClientId}_{Time.frameCount}";
 
-        // NetworkObject 스폰
+        // Configure → Spawn (NV를 Spawn 전에 설정)
         var networkObject = bulletObj.GetComponent<NetworkObject>();
-        if (networkObject != null)
-        {
-            networkObject.Spawn();
-        }
-
-        // 총알 발사
         var bullet = bulletObj.GetComponent<BrickGameBullet>();
-        if (bullet != null)
+        MB.Infrastructure.Network.NetworkSpawnUtil.SpawnAsServer(networkObject, go =>
         {
-            bullet.Fire(ownerClientId, targetClientId, Vector3.up, color);
-        }
+            bullet?.Fire(ownerClientId, targetClientId, Vector3.up, color);
+        });
     }
 
     /// <summary>
