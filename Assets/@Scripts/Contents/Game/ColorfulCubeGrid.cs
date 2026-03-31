@@ -362,6 +362,11 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
                 // 고유 이름 설정 (ClientRpc에서 블록 찾기 위해 필수!)
                 cube.name = $"GridBlock_{x}_{y}";
 
+                // Territory 레이어 설정 (Territory 카메라만 렌더링)
+                int terrLayer = LayerMask.NameToLayer("Territory");
+                if (terrLayer >= 0)
+                    cube.layer = terrLayer;
+
                 cube.transform.localScale = new Vector3(cubeSize, gridHeight, cubeSize);
                 cube.transform.parent = this.transform;
                 
@@ -493,7 +498,9 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
         
         // Wall 태그 설정
         corner.tag = "Wall";
-        
+        int tLayer = LayerMask.NameToLayer("Territory");
+        if (tLayer >= 0) corner.layer = tLayer;
+
         corner.transform.localScale = new Vector3(cubeSize, wallHeight, cubeSize);
         corner.transform.parent = this.transform;
         
@@ -530,6 +537,8 @@ public class IsometricGridGenerator : MonoBehaviour, IMap
             
             // Wall 태그 설정
             wall.tag = "Wall";
+            int twLayer = LayerMask.NameToLayer("Territory");
+            if (twLayer >= 0) wall.layer = twLayer;
             
             // Set wall dimensions
             if (isHorizontal)

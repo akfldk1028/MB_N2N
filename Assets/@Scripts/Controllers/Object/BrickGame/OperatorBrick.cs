@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using Unity.Assets.Scripts.Objects;
+using Unity.Netcode;
 
 namespace Unity.Assets.Scripts.Objects
 {
@@ -16,6 +17,10 @@ namespace Unity.Assets.Scripts.Objects
             Add,        // +
             Multiply    // ×
         }
+
+        // NetworkVariable로 동기화
+        private NetworkVariable<int> _networkOpType = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        private NetworkVariable<int> _networkOpValue = new NetworkVariable<int>(2, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
         [Header("Operator Settings")]
         [SerializeField] private OperatorType operatorType = OperatorType.Add;
@@ -45,9 +50,19 @@ namespace Unity.Assets.Scripts.Objects
 
         private void Start()
         {
-            // 컴포넌트 캐싱
-            if (brickRenderer == null)
+            // 3DBrick 렌더러 우선, 없으면 SpriteRenderer
+            var brick3D = transform.Find("3DBrick");
+            if (brick3D != null)
+            {
+                brickRenderer = brick3D.GetComponent<Renderer>();
+                // SpriteRenderer 비활성화 (3DBrick이 시각 담당, 겹침 방지)
+                var sr = GetComponent<SpriteRenderer>();
+                if (sr != null) sr.enabled = false;
+            }
+            else if (brickRenderer == null)
+            {
                 brickRenderer = GetComponent<Renderer>();
+            }
 
             // 텍스트 찾기
             if (operatorText == null)
@@ -55,6 +70,26 @@ namespace Unity.Assets.Scripts.Objects
                 Transform textTransform = transform.Find("brickWaveText");
                 if (textTransform != null)
                     operatorText = textTransform.GetComponent<TextMeshPro>();
+            }
+
+            // BrickGame 레이어 설정 (Territory 카메라에서 제외용)
+            int brickLayer = LayerMask.NameToLayer("BrickGame");
+            if (brickLayer >= 0)
+            {
+                gameObject.layer = brickLayer;
+                for (int i = 0; i < transform.childCount; i++)
+                    transform.GetChild(i).gameObject.layer = brickLayer;
+            }
+
+            // NetworkVariable 콜백 등록 + 현재 값 적용
+            _networkOpType.OnValueChanged += (prev, cur) => { operatorType = (OperatorType)cur; UpdateVisual(); };
+            _networkOpValue.OnValueChanged += (prev, cur) => { operatorValue = cur; UpdateVisual(); };
+
+            // 초기 동기화 값 적용 (Client에서 이미 복제된 값)
+            if (_networkOpType.Value != 0 || _networkOpValue.Value != 2)
+            {
+                operatorType = (OperatorType)_networkOpType.Value;
+                operatorValue = _networkOpValue.Value;
             }
 
             // 비주얼 업데이트
@@ -68,6 +103,15 @@ namespace Unity.Assets.Scripts.Objects
         {
             operatorType = type;
             operatorValue = Mathf.Max(1, value); // 최소 1
+
+            // 서버: NetworkVariable에 동기화
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsServer)
+            {
+                _networkOpType.Value = (int)type;
+                _networkOpValue.Value = operatorValue;
+            }
+
             UpdateVisual();
         }
 

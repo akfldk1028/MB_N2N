@@ -18,6 +18,7 @@ public class GameScene : BaseScene
 		Managers.Camera.Initialize();
 		GameLogger.Success("GameScene", "CameraManager 초기화 완료");
 
+
 		// ✅ BrickGame UI 표시 (prefab 없으면 스킵 - 멀티플레이어 Client에서 발생 가능)
 		try
 		{

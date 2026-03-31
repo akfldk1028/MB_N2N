@@ -6,7 +6,7 @@ description: |
   사용 금지: 코드만 수정, 테스트만(unity-test), 컴파일만(unity-validate)
 argument-hint: "[android|windows|webgl|all]"
 disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Bash, mcp__mcp-unity__recompile_scripts, mcp__mcp-unity__execute_menu_item, mcp__mcp-unity__get_console_logs
+allowed-tools: Read, Grep, Glob, Bash, mcp__unity__unity_get_compilation_errors, mcp__unity__unity_execute_menu_item, mcp__unity__unity_console_log
 ---
 
 # Unity Build

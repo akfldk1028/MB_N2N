@@ -506,8 +506,8 @@ namespace Unity.Assets.Scripts.Network
                 transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
             if (transport != null)
             {
-                transport.SetConnectionData("127.0.0.1", 7777, "0.0.0.0");
-                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Listen 0.0.0.0:7777");
+                transport.SetConnectionData("127.0.0.1", 7778, "0.0.0.0");
+                GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Listen 0.0.0.0:7778");
             }
             else
             {
@@ -583,7 +583,7 @@ namespace Unity.Assets.Scripts.Network
                 transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
             if (transport != null)
             {
-                transport.SetConnectionData("127.0.0.1", 7777);
+                transport.SetConnectionData("127.0.0.1", 7778);
                 GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7777");
             }
             else
@@ -603,18 +603,20 @@ namespace Unity.Assets.Scripts.Network
 
             try
             {
-                // 이전 연결 상태 정리
+                // 이전 연결 상태 정리 — Shutdown 필요 시 호출자에서 대기 후 재호출
                 if (NetworkManager.IsListening)
                 {
-                    GameLogger.Info("ConnectionManagerEx", "[MPPM] 기존 연결 정리 (Shutdown)");
+                    GameLogger.Info("ConnectionManagerEx", "[MPPM] 기존 연결 활성 — Shutdown 후 재시도 필요");
                     NetworkManager.Shutdown();
+                    // Shutdown 직후 StartClient 호출하면 실패함 — 호출자에서 대기 후 재시도
+                    return;
                 }
 
-                // Transport 재설정 (Shutdown 후 필요)
+                // Transport 설정
                 if (transport != null)
                 {
-                    transport.SetConnectionData("127.0.0.1", 7777);
-                    GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 재설정: Connect 127.0.0.1:7777");
+                    transport.SetConnectionData("127.0.0.1", 7778);
+                    GameLogger.Info("ConnectionManagerEx", "[MPPM] Transport 설정: Connect 127.0.0.1:7777");
                 }
 
                 // MPPM 로컬 테스트: ForceSamePrefabs 비활성화
@@ -626,11 +628,10 @@ namespace Unity.Assets.Scripts.Network
                 if (started)
                 {
                     GameLogger.Success("ConnectionManagerEx", $"[MPPM] Client 직접 시작 성공: {playerName}");
-                    // OnClientConnected 콜백이 ClientConnected 상태로 전환을 처리함
                 }
                 else
                 {
-                    GameLogger.Error("ConnectionManagerEx", "[MPPM] Client 직접 시작 실패");
+                    GameLogger.Error("ConnectionManagerEx", $"[MPPM] Client 직접 시작 실패 (IsListening={NetworkManager.IsListening}, Transport={transport != null})");
                     ChangeState(m_Offline);
                 }
             }

@@ -203,19 +203,40 @@ public class CentralMapBulletController : NetworkBehaviour
             return;
         }
 
-        // ✅ 4. NetworkManager에 Prefab 등록 (HOST/CLIENT 모두)
+        // ✅ 4. NetworkManager에 Prefab 등록 (HOST/CLIENT 모두, 중복 방지)
         var networkManager = NetworkManager.Singleton;
         if (networkManager != null && bulletPrefab != null)
         {
-            try
+            // 이미 등록되어 있는지 확인 (duplicate PrefabIdHash 방지)
+            var networkObject = bulletPrefab.GetComponent<NetworkObject>();
+            bool alreadyRegistered = false;
+            if (networkObject != null)
             {
-                networkManager.AddNetworkPrefab(bulletPrefab);
-                GameLogger.Success("CentralMapBulletController", "총알 Prefab NetworkManager 등록 완료");
+                foreach (var prefab in networkManager.NetworkConfig.Prefabs.Prefabs)
+                {
+                    if (prefab.Prefab != null && prefab.Prefab.GetComponent<NetworkObject>()?.PrefabIdHash == networkObject.PrefabIdHash)
+                    {
+                        alreadyRegistered = true;
+                        break;
+                    }
+                }
             }
-            catch (System.Exception e)
+
+            if (!alreadyRegistered)
             {
-                // 이미 등록되어 있으면 무시 (정상)
-                GameLogger.Info("CentralMapBulletController", $"NetworkPrefab 등록 (이미 등록됨): {e.Message}");
+                try
+                {
+                    networkManager.AddNetworkPrefab(bulletPrefab);
+                    GameLogger.Success("CentralMapBulletController", "총알 Prefab NetworkManager 등록 완료");
+                }
+                catch (System.Exception e)
+                {
+                    GameLogger.Info("CentralMapBulletController", $"NetworkPrefab 등록 (이미 등록됨): {e.Message}");
+                }
+            }
+            else
+            {
+                GameLogger.Info("CentralMapBulletController", "총알 Prefab 이미 NetworkManager에 등록됨 - 스킵");
             }
         }
     }

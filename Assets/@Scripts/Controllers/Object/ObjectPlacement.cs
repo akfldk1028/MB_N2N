@@ -523,6 +523,11 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     
     private void SpawnAndInitializeObject(GameObject prefabToSpawn, PotentialSpawnInfo spawnInfo, SpawnableObjectType objectType = SpawnableObjectType.Brick)
     {
+        // ✅ 네트워크 모드에서는 서버만 스폰 (Client는 NetworkObject 복제로 자동 생성됨)
+        var nm = NetworkManager.Singleton;
+        if (nm != null && nm.IsListening && !nm.IsServer)
+            return;
+
         Vector3 spawnPosition = spawnInfo.SpawnPosition;
         float targetY = spawnInfo.TargetY;
         Vector3 objectScale = CalculateObjectScale(rightBorder.position.x - leftBorder.position.x);
@@ -642,58 +647,56 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
     
     private void MoveDownAllObjects()
     {
-        GameLogger.Warning("ObjectPlacement", $"🔽 MoveDownAllObjects 호출! 활성 블록 수: {activeObjectData.Count}");
-        
-        // ✅ 먼저 모든 블록을 false로 변경 (첫 행도 이제 이동 가능)
-        var keys = activeObjectData.Keys.ToList();
-        foreach (var key in keys)
-        {
-            if (key != null)
-            {
-                activeObjectData[key] = false;
-            }
-        }
-        
-        List<GameObject> keysToRemove = new List<GameObject>();
-        var currentActiveObjects = activeObjectData.ToList();
-        
         // 전체 너비를 기준으로 블록 크기 계산
         float totalWidth = rightBorder.position.x - leftBorder.position.x;
         Vector3 objectScale = CalculateObjectScale(totalWidth);
-        float actualObjectHeight = objectScale.y;
-        
-        // 간격 없이 정확히 블록 높이만큼 이동
-        float exactMoveDistance = actualObjectHeight;
+        float exactMoveDistance = objectScale.y;
 
-        foreach (KeyValuePair<GameObject, bool> pair in currentActiveObjects)
+        // ✅ activeObjectData 대신 씬의 모든 벽돌을 X 범위로 필터링하여 이동
+        // (NetworkObject 복제 후 activeObjectData에서 누락된 벽돌도 포함)
+        float leftX = leftBorder.position.x + (_isMultiplayerMode ? _xOffset : 0);
+        float rightX = rightBorder.position.x + (_isMultiplayerMode ? _xOffset : 0);
+
+        var allBricks = FindObjectsByType<Transform>(FindObjectsSortMode.None);
+        int moved = 0;
+
+        foreach (var t in allBricks)
         {
-            GameObject obj = pair.Key;
+            if (t == null) continue;
+            // 스폰된 오브젝트만 (brick, operatorBrick, star, bonusBall 등)
+            if (!t.name.Contains("(Clone)")) continue;
+            // 게임 오브젝트가 아닌 것 제외 (Plank, Ball, Turret, UI 등)
+            if (t.name.Contains("Plank") || t.name.Contains("Ball_") || t.name.Contains("Turret") || t.name.Contains("Bullet")) continue;
 
-            if (obj == null)
-            {
-                keysToRemove.Add(obj);
-                continue;
-            }
+            // X 범위로 이 ObjectPlacement 소속 벽돌인지 확인
+            float x = t.position.x;
+            if (x < leftX - 1f || x > rightX + 1f) continue;
 
-            // moveDownDistance 대신 정확한 블록 높이로 설정
-            float newY = obj.transform.position.y - exactMoveDistance;
+            float newY = t.position.y - exactMoveDistance;
 
             if (newY < BottomBoundary)
             {
-                Destroy(obj);
-                keysToRemove.Add(obj);
+                // 서버에서만 파괴
+                var nm = NetworkManager.Singleton;
+                if (nm != null && nm.IsServer)
+                {
+                    var no = t.GetComponent<NetworkObject>();
+                    if (no != null && no.IsSpawned) no.Despawn();
+                    else Destroy(t.gameObject);
+                }
             }
             else
             {
-                GameLogger.Info("ObjectPlacement", $"블록 이동: {obj.name} → Y={newY:F2}");
-                StartCoroutine(MoveDown(obj, newY));
+                StartCoroutine(MoveDown(t.gameObject, newY));
+                moved++;
             }
         }
 
-        foreach (GameObject key in keysToRemove)
-        {
-            activeObjectData.Remove(key);
-        }
+        // activeObjectData도 정리 (null 제거)
+        var keysToRemove = activeObjectData.Keys.Where(k => k == null).ToList();
+        foreach (var key in keysToRemove) activeObjectData.Remove(key);
+
+        GameLogger.Info("ObjectPlacement", $"🔽 MoveDown: {moved}개 이동 (X범위: {leftX:F1}~{rightX:F1})");
     }
     private IEnumerator MoveDown(GameObject obj, float targetY)
     {

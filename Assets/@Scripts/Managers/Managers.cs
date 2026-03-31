@@ -161,26 +161,40 @@ public class Managers : MonoBehaviour
     {
         GameLogger.SystemStart("Managers", "네트워크 컴포넌트 초기화 시작");
 
-        // 1. Unity Services 초기화
-        if (UnityServices.State == ServicesInitializationState.Uninitialized)
+        // 1. Unity Services 초기화 (MPPM 클론에서는 건너뜀 — hang 방지)
+        bool skipServices = false;
+#if UNITY_EDITOR
+        try
         {
-            try
+            if (!Unity.Multiplayer.Playmode.CurrentPlayer.IsMainEditor)
             {
-                GameLogger.Progress("Managers", "Unity Services 초기화 중...");
-                var options = new InitializationOptions()
-                    .SetEnvironmentName("production");
-                await UnityServices.InitializeAsync(options);
-                GameLogger.Success("Managers", "Unity Services 초기화 성공");
-            }
-            catch (Exception e)
-            {
-                GameLogger.Error("Managers", $"Unity Services 초기화 실패: {e.Message}");
-                return;
+                skipServices = true;
+                GameLogger.Info("Managers", "MPPM 클론 감지 → Unity Services 건너뜀");
             }
         }
-        else
+        catch { }
+#endif
+        if (!skipServices)
         {
-            GameLogger.Success("Managers", "Unity Services 이미 초기화됨");
+            if (UnityServices.State == ServicesInitializationState.Uninitialized)
+            {
+                try
+                {
+                    GameLogger.Progress("Managers", "Unity Services 초기화 중...");
+                    var options = new InitializationOptions()
+                        .SetEnvironmentName("production");
+                    await UnityServices.InitializeAsync(options);
+                    GameLogger.Success("Managers", "Unity Services 초기화 성공");
+                }
+                catch (Exception e)
+                {
+                    GameLogger.Warning("Managers", $"Unity Services 초기화 실패: {e.Message}");
+                }
+            }
+            else
+            {
+                GameLogger.Success("Managers", "Unity Services 이미 초기화됨");
+            }
         }
 
         // 1-1. MPPM Clone 감지 → 인증 프로필 분리

@@ -2,6 +2,7 @@ using UnityEngine;
 using TMPro;
 using MB.Infrastructure.Messages;
 using Unity.Assets.Scripts.Objects;
+using Unity.Netcode;
 
 namespace Unity.Assets.Scripts.Objects
 {
@@ -13,12 +14,14 @@ namespace Unity.Assets.Scripts.Objects
         private const float bottomBoundary = -2.3f;
         private bool isGameOverTriggered = false; // 게임 오버 중복 호출 방지
 
-        // BricksWave 로직 통합
+        // BricksWave 로직 통합 — NetworkVariable로 동기화
+        private NetworkVariable<int> _networkWave = new NetworkVariable<int>(1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         private int wave = 1;
         private int originalWave = 1; // 원래 wave 값 저장 (점수 계산용)
         private TextMeshPro waveText;
         private AudioSource brickHitSound;
         [SerializeField] private SpriteRenderer brickSpriteRenderer; // SpriteRenderer for color changes
+        private MeshRenderer _3dBrickRenderer; // 3DBrick 메시 렌더러
 
         #region Public Properties (총알 시스템용)
         /// <summary>
@@ -36,7 +39,7 @@ namespace Unity.Assets.Scripts.Objects
         /// <summary>
         /// 현재 체력 (wave)
         /// </summary>
-        public int Health => wave;
+        public int Health => _networkWave?.Value ?? wave;
         #endregion
         
         private void Start()
@@ -48,23 +51,46 @@ namespace Unity.Assets.Scripts.Objects
             {
                 brickSpriteRenderer = GetComponent<SpriteRenderer>();
             }
+
+            // 3DBrick 렌더러 캐싱 + SpriteRenderer 비활성화 (3DBrick이 시각 담당)
+            var brick3D = transform.Find("3DBrick");
+            if (brick3D != null)
+            {
+                _3dBrickRenderer = brick3D.GetComponent<MeshRenderer>();
+                // 3DBrick이 있으면 SpriteRenderer는 렌더링하지 않음 (겹침 방지)
+                if (brickSpriteRenderer != null)
+                    brickSpriteRenderer.enabled = false;
+            }
+
+            // BrickGame 레이어 설정 (Territory 카메라에서 제외용)
+            int brickLayer = LayerMask.NameToLayer("BrickGame");
+            if (brickLayer >= 0)
+                SetLayerRecursively(gameObject, brickLayer);
             
             Transform textTransform = transform.Find("brickWaveText");
             if (textTransform != null)
             {
                 waveText = textTransform.GetComponent<TextMeshPro>();
-                
-                // 레벨에 따라 벽돌을 부수는데 필요한 타격 횟수 결정
-                wave = CommonVars.level < 10 ? 
-                    Random.Range(1, 3) : 
-                    Random.Range(CommonVars.level / 5, CommonVars.level / 2);
-                
-                // 원래 wave 값 저장 (점수 계산용)
-                originalWave = wave;
-                
-                waveText.text = wave.ToString();
             }
-            
+
+            // 서버: wave 결정 → NetworkVariable에 설정
+            var nm = NetworkManager.Singleton;
+            bool isServer = nm != null && nm.IsServer;
+
+            if (isServer)
+            {
+                int newWave = CommonVars.level < 10 ?
+                    Random.Range(1, 3) :
+                    Random.Range(CommonVars.level / 5, CommonVars.level / 2);
+                _networkWave.Value = newWave;
+            }
+
+            // NetworkVariable 변경 콜백 등록
+            _networkWave.OnValueChanged += OnWaveChanged;
+
+            // 현재 값 적용 (서버에서 이미 설정됐거나, 클라이언트에서 복제된 값)
+            ApplyWave(_networkWave.Value);
+
             // 색상 업데이트
             ColorBrick();
 
@@ -176,17 +202,18 @@ namespace Unity.Assets.Scripts.Objects
             // 현재 공의 공격력 (없으면 기본값 1 사용)
             int attackPower = ball != null ? ball.AttackPower : 1;
             
-            // 체력(wave) 감소 - 공격력만큼 차감
-            wave -= attackPower;
-
+            // 체력(wave) 감소 - 공격력만큼 차감 (서버 권한)
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                _networkWave.Value -= attackPower;
+            wave = _networkWave.Value;
 
             ColorBrick();
-            
+
             if (waveText != null)
             {
                 waveText.text = wave.ToString();
             }
-            
+
             // 체력이 0이 되면 벽돌 파괴
             if (wave <= 0)
             {
@@ -232,7 +259,10 @@ namespace Unity.Assets.Scripts.Objects
         {
             if (damage <= 0) return;
 
-            wave -= damage;
+            // 서버 권한으로 wave 감소
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                _networkWave.Value -= damage;
+            wave = _networkWave.Value;
             ColorBrick();
 
             if (waveText != null)
@@ -324,20 +354,52 @@ namespace Unity.Assets.Scripts.Objects
         /// </summary>
         protected virtual void ColorBrick()
         {
-            if (brickSpriteRenderer == null) return;
+            Color brickColor;
             if (wave <= 30)
             {
-                brickSpriteRenderer.color = new Color(1, 1 - (wave / 30f), 0); // 노란색에서 빨간색으로 전환
+                brickColor = new Color(1, 1 - (wave / 30f), 0); // 노란색에서 빨간색으로 전환
             }
             else if (wave <= 60)
             {
-                brickSpriteRenderer.color = new Color(1, 0, (wave - 30) / 30f); // 빨간색에서 보라색으로 전환
+                brickColor = new Color(1, 0, (wave - 30) / 30f); // 빨간색에서 보라색으로 전환
             }
             else
             {
                 float redColorValue = 1 - ((wave - 60) / 30f);
-                brickSpriteRenderer.color = new Color(Mathf.Max(redColorValue, 0), 0, 1); // 보라색에서 파란색으로 전환
+                brickColor = new Color(Mathf.Max(redColorValue, 0), 0, 1); // 보라색에서 파란색으로 전환
             }
+
+            // 3DBrick 메시에 색상 적용
+            if (_3dBrickRenderer != null)
+            {
+                _3dBrickRenderer.material.color = brickColor;
+            }
+            // fallback: 3DBrick 없으면 SpriteRenderer 사용
+            else if (brickSpriteRenderer != null)
+            {
+                brickSpriteRenderer.color = brickColor;
+            }
+        }
+
+        private void OnWaveChanged(int previousValue, int newValue)
+        {
+            ApplyWave(newValue);
+        }
+
+        private void ApplyWave(int newWave)
+        {
+            wave = newWave;
+            originalWave = Mathf.Max(originalWave, newWave); // 최초 값 유지
+            if (waveText != null)
+                waveText.text = wave.ToString();
+            ColorBrick();
+        }
+
+        private static void SetLayerRecursively(GameObject obj, int layer)
+        {
+            obj.layer = layer;
+            for (int i = 0; i < obj.transform.childCount; i++)
+                SetLayerRecursively(obj.transform.GetChild(i).gameObject, layer);
         }
     }
 }

@@ -55,6 +55,11 @@ namespace Unity.Assets.Scripts.Objects
         {
             base.Awake();
 
+            // BrickGame 레이어 설정 (Territory 카메라에서 제외)
+            int brickLayer = LayerMask.NameToLayer("BrickGame");
+            if (brickLayer >= 0)
+                gameObject.layer = brickLayer;
+
             // SpriteRenderer 캐시
             _spriteRenderer = GetComponent<SpriteRenderer>();
 

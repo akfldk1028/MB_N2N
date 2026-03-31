@@ -136,6 +136,11 @@ namespace Unity.Assets.Scripts.Objects
         
         protected virtual void Start() // virtual로 선언하여 혹시 모를 자식 클래스 오버라이드 허용
         {
+            // BrickGame 레이어 설정 (Territory 카메라에서 제외)
+            int brickLayer = LayerMask.NameToLayer("BrickGame");
+            if (brickLayer >= 0)
+                gameObject.layer = brickLayer;
+
             // ✅ 네트워크 모드 체크: OnNetworkSpawn()에서 초기화하므로 Start()에서는 스킵
             var netObj = GetComponent<NetworkObject>();
             bool isNetworkMode = netObj != null && (netObj.IsSpawned || NetworkManager.Singleton?.IsListening == true);

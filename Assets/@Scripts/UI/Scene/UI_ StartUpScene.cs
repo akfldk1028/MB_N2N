@@ -188,12 +188,47 @@ public class UI_StartUpScene : UI_Scene
         else
         {
             // 클론 → Client (Host가 먼저 시작될 시간 확보)
-            GameLogger.Network("UI_StartUpScene", "[MPPM] 클론 에디터 감지 → Client로 시작 (약 2초 대기)");
-            await Task.Delay(2000); // Host 시작 대기
+            GameLogger.Network("UI_StartUpScene", "[MPPM] 클론 에디터 감지 → Client로 시작");
             string playerName = "Player_Client";
             Managers.LocalUser.IsHost = false;
             Managers.LocalUser.DisplayName = playerName;
-            Managers.Connection.StartClientDirect(playerName);
+
+            // Host 초기화 대기 + 재시도 (최대 8회)
+            for (int attempt = 1; attempt <= 8; attempt++)
+            {
+                // 첫 시도는 Host 준비 대기 길게, 이후는 짧게
+                int waitMs = attempt == 1 ? 5000 : 3000;
+                await Task.Delay(waitMs);
+
+                GameLogger.Info("UI_StartUpScene", $"[MPPM] Client 연결 시도 {attempt}/8 (IsListening={Managers.Network.IsListening})");
+
+                // 이전 연결이 남아있으면 정리 후 대기
+                if (Managers.Network.IsListening)
+                {
+                    Managers.Network.Shutdown();
+                    await Task.Delay(3000); // Shutdown 완료 충분히 대기
+                    GameLogger.Info("UI_StartUpScene", $"[MPPM] Shutdown 후 대기 완료");
+                }
+
+                Managers.Connection.StartClientDirect(playerName);
+
+                // 연결 성공 대기 (최대 8초)
+                float checkTime = 0f;
+                while (checkTime < 8f)
+                {
+                    await Task.Delay(500);
+                    checkTime += 0.5f;
+                    if (Managers.Network.IsConnectedClient)
+                    {
+                        GameLogger.Success("UI_StartUpScene", $"[MPPM] Client 연결 성공! (시도 {attempt})");
+                        return;
+                    }
+                }
+
+                GameLogger.Warning("UI_StartUpScene", $"[MPPM] Client 연결 시도 {attempt} 실패, 재시도...");
+            }
+
+            GameLogger.Error("UI_StartUpScene", "[MPPM] Client 연결 8회 모두 실패");
         }
     }
 #endif

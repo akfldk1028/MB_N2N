@@ -1,14 +1,13 @@
 {
   "mcpServers": {
-    "mcp-unity": {
+    "unity": {
       "command": "node",
       "args": [
-        "C:/DK/MB/MB_N2N/Library/PackageCache/com.gamelovers.mcp-unity@72c005fa0ae2/Server~/build/index.js"
+        "C:/DK/MB/unity-mcp-server/src/index.js"
       ],
       "env": {
-        "LOGGING": "true",
-        "LOGGING_FILE": "true",
-        "UNITY_HOST": "127.0.0.1"
+        "UNITY_HUB_PATH": "C:\\Program Files\\Unity Hub\\Unity Hub.exe",
+        "UNITY_BRIDGE_PORT": "7890"
       }
     }
   }

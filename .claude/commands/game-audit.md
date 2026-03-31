@@ -5,7 +5,7 @@ description: |
   사용 시점: (1) 프로덕션 점검, (2) 새 기능 추가 전 상태 파악, (3) 버그 원인 추적
   사용 금지: 단순 컴파일 확인(unity-validate), 특정 파일만 수정
 argument-hint: "[all|brickgame|territory|network|ui]"
-allowed-tools: Read, Grep, Glob, Bash, mcp__mcp-unity__recompile_scripts, mcp__mcp-unity__get_console_logs, mcp__mcp-unity__get_scene_info, mcp__mcp-unity__run_tests
+allowed-tools: Read, Grep, Glob, Bash, mcp__unity__unity_get_compilation_errors, mcp__unity__unity_console_log, mcp__unity__unity_scene_hierarchy, mcp__unity__unity_advanced_tool
 ---
 
 # Game Audit

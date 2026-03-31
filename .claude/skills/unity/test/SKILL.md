@@ -5,7 +5,7 @@ description: |
   사용 시점: (1) 기능 구현 후 테스트, (2) 버그 수정 후 회귀 테스트, (3) 새 테스트 작성 후
   사용 금지: 컴파일만(unity/validate quick), 빌드(unity/build)
 argument-hint: "[edit|play|all]"
-allowed-tools: Read, Grep, Glob, Bash, mcp__mcp-unity__run_tests, mcp__mcp-unity__recompile_scripts
+allowed-tools: Read, Grep, Glob, Bash, mcp__unity__unity_advanced_tool, mcp__unity__unity_get_compilation_errors
 ---
 
 # Unity Test
@@ -24,7 +24,7 @@ allowed-tools: Read, Grep, Glob, Bash, mcp__mcp-unity__run_tests, mcp__mcp-unity
 인수: $ARGUMENTS (기본값: all)
 
 ### Step 1: 컴파일 확인
-`mcp__mcp-unity__recompile_scripts` → 0 errors
+`mcp__unity__unity_get_compilation_errors(severity: "error")` → 0 errors
 
 ### Step 2: 테스트 실행
 - `edit` → EditMode만

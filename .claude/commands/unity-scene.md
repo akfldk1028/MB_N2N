@@ -5,7 +5,7 @@ description: |
   사용 시점: (1) 씬 구조 파악, (2) 오브젝트 찾기, (3) 컴포넌트 값 확인, (4) 프리팹 상태 확인
   사용 금지: 코드만 수정(Edit), 컴파일 확인(unity-validate)
 argument-hint: "[info|find <name>|inspect <path>]"
-allowed-tools: Read, Grep, Glob, mcp__mcp-unity__get_scene_info, mcp__mcp-unity__get_gameobject, mcp__mcp-unity__update_component, mcp__mcp-unity__load_scene, mcp__mcp-unity__save_scene
+allowed-tools: Read, Grep, Glob, mcp__unity__unity_scene_hierarchy, mcp__unity__unity_gameobject_info, mcp__unity__unity_component_set_property, mcp__unity__unity_scene_open, mcp__unity__unity_scene_save
 ---
 
 # Unity Scene
@@ -32,13 +32,13 @@ Unity 씬 구조를 조사하고 오브젝트를 검사합니다.
 ## Process
 
 ### info 모드 (기본)
-`mcp__mcp-unity__get_scene_info` 호출하여:
+`mcp__unity__unity_scene_hierarchy` 호출하여:
 - 현재 씬 이름, Build Index
 - 루트 오브젝트 목록
 - 오브젝트 수
 
 ### find 모드
-`mcp__mcp-unity__get_gameobject` 호출하여:
+`mcp__unity__unity_gameobject_info` 호출하여:
 - 이름으로 오브젝트 검색
 - 컴포넌트 목록 확인
 - Transform 정보

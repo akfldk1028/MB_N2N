@@ -82,6 +82,15 @@ public class Cannon : BaseObject
 
     void Start()
     {
+        // BrickGame 레이어 설정 (Territory 카메라에서 제외)
+        int brickLayer = LayerMask.NameToLayer("BrickGame");
+        if (brickLayer >= 0)
+        {
+            gameObject.layer = brickLayer;
+            for (int i = 0; i < transform.childCount; i++)
+                transform.GetChild(i).gameObject.layer = brickLayer;
+        }
+
         if (turretBarrel == null)
         {
             Debug.LogError($"[Cannon] {name} - turretBarrel이 없습니다!", this);
