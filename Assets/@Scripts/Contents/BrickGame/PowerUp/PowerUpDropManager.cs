@@ -216,6 +216,9 @@ public class PowerUpDropManager
     {
         if (!MultiplayerUtil.HasServerAuthority()) return;
 
+        // 멀티플레이어: 런타임 프리팹(hash=0) 문제로 PowerUp 스킵
+        if (MultiplayerUtil.IsMultiplayer()) return;
+
         if (_powerUpPrefab == null)
         {
             GameLogger.Error("PowerUpDropManager", "PowerUpItem Prefab이 없습니다!");
