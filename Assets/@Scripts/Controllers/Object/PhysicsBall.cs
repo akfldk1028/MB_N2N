@@ -78,13 +78,6 @@ namespace Unity.Assets.Scripts.Objects
         private NetworkVariable<int> _syncedBallCount = new NetworkVariable<int>(1);
         private NetworkVariable<EBallState> _syncedState = new NetworkVariable<EBallState>(EBallState.None); // 상태 동기화 (여기서 정의)
 
-        // ✅ 위치 동기화 (Server가 Write, Client가 Read)
-        private NetworkVariable<Vector3> _syncedPosition = new NetworkVariable<Vector3>(
-            Vector3.zero,
-            NetworkVariableReadPermission.Everyone,
-            NetworkVariableWritePermission.Server
-        );
-
         // 시스템 변수
         private Camera mainCamera;
         
@@ -197,18 +190,8 @@ namespace Unity.Assets.Scripts.Objects
             if (IsServer || !IsSpawned) // 로컬 테스트용으로 !IsSpawned 추가
             {
                 UpdateStateMachine();
-
-                // ✅ Server: 위치 동기화 (NetworkVariable 업데이트)
-                if (IsSpawned)
-                {
-                    _syncedPosition.Value = transform.position;
-                }
             }
-            else if (IsSpawned && !IsServer)
-            {
-                // ✅ Client: Server 위치로 보간
-                transform.position = Vector3.Lerp(transform.position, _syncedPosition.Value, Time.deltaTime * 15f);
-            }
+            // Client: NetworkTransform이 자동으로 위치 동기화 (수동 보간 불필요)
 
             UpdatePowerStatus();
         }
@@ -241,29 +224,21 @@ namespace Unity.Assets.Scripts.Objects
                 _syncedBallCount.Value = ballCount;
                 _syncedState.Value = CurrentState; // 초기 상태 동기화
 
-                // ✅ Server: 현재 위치를 NetworkVariable로 동기화
-                _syncedPosition.Value = transform.position;
-                GameLogger.Info("PhysicsBall", $"[Server] OnNetworkSpawn: 위치 동기화 = {transform.position}");
+                GameLogger.Info("PhysicsBall", $"[Server] OnNetworkSpawn: 위치 = {transform.position}");
             }
 
             if (IsClient)
             {
                 _syncedBallCount.OnValueChanged += OnBallCountChanged;
-                _syncedState.OnValueChanged += OnStateChanged; // 상태 변경 콜백 등록
+                _syncedState.OnValueChanged += OnStateChanged;
 
                 // 클라이언트는 서버로부터 받은 상태를 즉시 적용
                 CurrentState = _syncedState.Value;
-
-                // ✅ Client: Server 위치로 즉시 이동 (중앙에 멈춰있는 문제 해결)
-                if (_syncedPosition.Value != Vector3.zero)
-                {
-                    transform.position = _syncedPosition.Value;
-                    GameLogger.Info("PhysicsBall", $"[Client] OnNetworkSpawn: Server 위치로 이동 = {_syncedPosition.Value}");
-                }
-
-                // ✅ Client: 위치 변경 콜백 등록 (초기화 타이밍 문제 대비)
-                _syncedPosition.OnValueChanged += OnSyncedPositionChanged;
+                // NetworkTransform이 위치 자동 동기화 처리
             }
+
+            // ✅ 팀 색깔 적용 (OwnerClientId 기반, 모든 인스턴스에서 로컬 설정)
+            ApplyTeamColor();
 
             // ✅ Plank 참조가 없으면 같은 Owner의 Plank 찾기
             if (plank == null)
@@ -336,8 +311,7 @@ namespace Unity.Assets.Scripts.Objects
             if (IsClient)
             {
                 _syncedBallCount.OnValueChanged -= OnBallCountChanged;
-                _syncedState.OnValueChanged -= OnStateChanged; // 상태 변경 콜백 해제
-                _syncedPosition.OnValueChanged -= OnSyncedPositionChanged; // ✅ 위치 콜백 해제
+                _syncedState.OnValueChanged -= OnStateChanged;
             }
         }
 
@@ -346,28 +320,36 @@ namespace Unity.Assets.Scripts.Objects
 
         private void OnStateChanged(EBallState previousValue, EBallState newValue)
         {
-            // 클라이언트는 서버로부터 받은 상태를 적용
             if (!IsServer)
             {
                  CurrentState = newValue;
             }
         }
-
-        /// <summary>
-        /// Client: Server 위치 변경 시 콜백 (Update에서 Lerp로 처리하므로 여기서는 로그만)
-        /// </summary>
-        private void OnSyncedPositionChanged(Vector3 previousValue, Vector3 newValue)
-        {
-            // Update()에서 Lerp로 처리하므로 여기서는 디버그용
-            // 초기화 직후 첫 위치 변경 시에만 즉시 이동 (Lerp 대기 없이)
-            if (previousValue == Vector3.zero && newValue != Vector3.zero)
-            {
-                transform.position = newValue;
-                GameLogger.Info("PhysicsBall", $"[Client] 첫 위치 동기화: {newValue}");
-            }
-        }
         #endregion
         
+        #region Team Color
+        /// <summary>
+        /// OwnerClientId 기반 팀 색깔 적용 (모든 인스턴스에서 로컬 설정)
+        /// Player0 = 초록, Player1 = 노랑
+        /// </summary>
+        private void ApplyTeamColor()
+        {
+            Color teamColor = (OwnerClientId == 0) ? new Color(0.3f, 0.9f, 0.3f) : new Color(0.95f, 0.85f, 0.2f);
+
+            // MeshRenderer 또는 ballModel의 Renderer
+            var renderer = ballRenderer;
+            if (renderer == null) renderer = GetComponent<Renderer>();
+            if (renderer == null && ballModel != null) renderer = ballModel.GetComponent<Renderer>();
+
+            if (renderer != null)
+            {
+                renderer.material.color = teamColor;
+            }
+
+            GameLogger.Info("PhysicsBall", $"[Player {OwnerClientId}] 팀 색깔 적용: {teamColor}");
+        }
+        #endregion
+
         #region Overridden Methods
         protected override void OnStuck()
         {

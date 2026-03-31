@@ -103,10 +103,24 @@ namespace Unity.Assets.Scripts.Objects
         {
             base.FixedUpdate(); // 부모 로직 호출
             
-            // 게임 오버 상태가 아니고, 오브젝트가 경계선 아래로 내려갔는지 확인
+            // 오브젝트가 경계선 아래로 내려갔는지 확인
             if (!isGameOverTriggered && transform.position.y < bottomBoundary)
             {
-                TriggerGameOver();
+                // ✅ 멀티플레이어: 벽돌 바닥 도달 = 게임오버 아님 (승리 조건은 대포 파괴)
+                if (MultiplayerUtil.IsMultiplayer())
+                {
+                    // 바닥 도달 벽돌은 Despawn만
+                    isGameOverTriggered = true;
+                    var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                    if (netObj != null && netObj.IsSpawned && MultiplayerUtil.IsServer())
+                        netObj.Despawn();
+                    else
+                        Destroy(gameObject);
+                }
+                else
+                {
+                    TriggerGameOver();
+                }
             }
         }
         

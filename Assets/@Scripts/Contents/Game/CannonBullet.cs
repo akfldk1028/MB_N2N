@@ -72,10 +72,10 @@ public class CannonBullet : NetworkBehaviour
 
     private void Awake()
     {
-        // BrickGame 레이어 설정 (Territory 카메라에서 제외)
-        int brickLayer = LayerMask.NameToLayer("BrickGame");
-        if (brickLayer >= 0)
-            gameObject.layer = brickLayer;
+        // Territory 레이어 설정 (중앙 맵 카메라에서 보이도록)
+        int territoryLayer = LayerMask.NameToLayer("Territory");
+        if (territoryLayer >= 0)
+            gameObject.layer = territoryLayer;
 
         // 리지드바디 설정 및 캐시
         _rigidbody = GetComponent<Rigidbody>();

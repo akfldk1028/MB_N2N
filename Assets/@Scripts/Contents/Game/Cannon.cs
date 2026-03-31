@@ -82,13 +82,11 @@ public class Cannon : BaseObject
 
     void Start()
     {
-        // BrickGame 레이어 설정 (Territory 카메라에서 제외)
-        int brickLayer = LayerMask.NameToLayer("BrickGame");
-        if (brickLayer >= 0)
+        // Territory 레이어 설정 (중앙 맵 카메라에서 보이도록 — 전체 자식 재귀)
+        int territoryLayer = LayerMask.NameToLayer("Territory");
+        if (territoryLayer >= 0)
         {
-            gameObject.layer = brickLayer;
-            for (int i = 0; i < transform.childCount; i++)
-                transform.GetChild(i).gameObject.layer = brickLayer;
+            SetLayerRecursive(gameObject, territoryLayer);
         }
 
         if (turretBarrel == null)
@@ -316,6 +314,16 @@ public class Cannon : BaseObject
     /// </summary>
     public bool IsFiring => _isFiring;
     #endregion
+
+    /// <summary>
+    /// 게임오브젝트와 모든 자식의 레이어를 재귀적으로 설정
+    /// </summary>
+    private void SetLayerRecursive(GameObject obj, int layer)
+    {
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+            SetLayerRecursive(child.gameObject, layer);
+    }
 
     // 기즈모: 그리드 중심으로 선 표시 (선택 사항)
     void OnDrawGizmosSelected()

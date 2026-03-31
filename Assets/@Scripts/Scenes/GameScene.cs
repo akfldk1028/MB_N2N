@@ -145,18 +145,17 @@ public class GameScene : BaseScene
 			return;
 		}
 
-		// NetworkBulletPool 동적 생성
+		// NetworkBulletPool 동적 생성 (NetworkObject 없이 — 런타임 GO는 hash=0이라 Client에서 실패)
 		var poolObj = new GameObject("@NetworkBulletPool");
-		var networkObj = poolObj.AddComponent<Unity.Netcode.NetworkObject>();
+		poolObj.AddComponent<Unity.Netcode.NetworkObject>(); // NetworkBehaviour 상속이라 필요하지만 Spawn 안 함
 		var bulletPool = poolObj.AddComponent<NetworkBulletPool>();
 
 		// bulletPrefab 설정
 		bulletPool.SetBulletPrefab(bulletPrefab);
 
-		// Spawn (Client에 동기화됨)
-		networkObj.Spawn();
-
-		GameLogger.Success("GameScene", "NetworkBulletPool 동적 생성 및 스폰 완료!");
+		// ✅ Spawn 하지 않음 — 서버 로컬 풀링 매니저로만 사용
+		// 각 총알은 개별 NetworkObject로 Spawn됨
+		GameLogger.Success("GameScene", "NetworkBulletPool 생성 완료 (서버 로컬 풀링)");
 	}
 
 	/// <summary>

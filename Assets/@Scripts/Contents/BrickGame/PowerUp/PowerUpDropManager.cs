@@ -227,11 +227,17 @@ public class PowerUpDropManager
         powerUpObj.SetActive(true);
         powerUpObj.name = $"PowerUp_{type}_{Time.frameCount}";
 
-        // NetworkObject 스폰
+        // ✅ 런타임 생성 프리팹은 globalObjectIdHash=0이라 NetworkObject.Spawn() 하면 Client에서 실패
+        // 멀티에서는 서버 로컬로만 동작 (Client에 동기화 불필요 — 파워업은 서버 물리로 처리)
         var networkObject = powerUpObj.GetComponent<NetworkObject>();
-        if (networkObject != null)
+        if (networkObject != null && !MultiplayerUtil.IsMultiplayer())
         {
             networkObject.Spawn();
+        }
+        else if (networkObject != null)
+        {
+            // 멀티: NetworkObject 제거 (Spawn 안 하면 경고 발생 방지)
+            UnityEngine.Object.Destroy(networkObject);
         }
 
         // PowerUpItem 초기화 (타입 및 소유자 설정)

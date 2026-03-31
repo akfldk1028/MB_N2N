@@ -492,6 +492,13 @@ public class BrickGameMultiplayerSpawner : NetworkBehaviour
     {
         if (!IsServer) return;
 
+        // ✅ 중복 스폰 방지 (콜백 + foreach 동시 호출 시)
+        if (_playerObjects.ContainsKey(clientId))
+        {
+            GameLogger.Warning("BrickGameMultiplayerSpawner", $"[중복 방지] Player {clientId} 이미 스폰됨 - 스킵");
+            return;
+        }
+
         int playerIndex = _playerObjects.Count;
         int totalPlayers = NetworkManager.ConnectedClientsIds.Count;
 

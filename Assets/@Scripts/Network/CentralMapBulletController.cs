@@ -647,9 +647,8 @@ public class CentralMapBulletController : NetworkBehaviour
 
             // ✅ NetworkObject Spawn
             if (netObj == null) continue;
-            netObj.Spawn();
 
-            // ✅ Spawn 후에 상태 리셋 및 SetOwner/Fire 호출
+            // ✅ Spawn 전에 SetOwner/Fire 호출 (NV를 Spawn 전에 설정해야 Client가 올바른 값 수신)
             CannonBullet bulletScript = bullet.GetComponent<CannonBullet>();
             if (bulletScript != null)
             {
@@ -657,6 +656,8 @@ public class CentralMapBulletController : NetworkBehaviour
                 bulletScript.SetOwner(cannon, cannon.playerColor, cannon.playerID);
                 bulletScript.Fire(direction, bulletSpeed);
             }
+
+            netObj.Spawn();
 
             // ✅ 프레임당 N발 발사 후 다음 프레임 대기 (기관총 효과: 다다다다닥!)
             // - 매 프레임 소량씩 Spawn → 네트워크 부하 분산 → 렉 없음!
@@ -690,22 +691,10 @@ public class CentralMapBulletController : NetworkBehaviour
         _winnerPlayerId.Value = winnerId;
         _isGameOver.Value = true;
 
-        // 게임 오버 ClientRpc (추가 처리용)
-        NotifyGameOverClientRpc(winnerId, destroyedPlayerId);
-    }
-
-    /// <summary>
-    /// [ClientRpc] 게임 오버 알림
-    /// </summary>
-    [ClientRpc]
-    private void NotifyGameOverClientRpc(int winnerId, int loserId)
-    {
+        // 게임 오버 알림: BrickGameMultiplayerSpawner.NotifyGameEndedClientRpc가 처리
+        // (런타임 AddComponent된 NetworkBehaviour는 ClientRpc 사용 불가)
         GameLogger.Warning("CentralMapBulletController",
-            $"🎮 게임 오버! 승자: Player {winnerId}, 패자: Player {loserId}");
-
-        // ActionBus에 발행 (UI 업데이트용)
-        Managers.PublishAction(MB.Infrastructure.Messages.ActionId.BrickGame_GameOver,
-            new GameOverPayload(winnerId, loserId));
+            $"게임 오버! 승자: Player {winnerId}, 패자: Player {destroyedPlayerId}");
     }
 
     /// <summary>
