@@ -144,15 +144,20 @@ public class UI_StartUpScene : UI_Scene
         Unity.Netcode.Transports.UTP.UnityTransport transport = null;
         while (waitTime < 30f)
         {
-            bool ready = Managers.Initialized
-                && Managers.Network != null
+            // Managers.Initialized는 Domain Reload 후 false로 남을 수 있음
+            // Network/Connection이 있으면 실질적으로 초기화 완료
+            bool ready = Managers.Network != null
                 && Managers.Connection != null;
 
             if (ready)
             {
+                // Transport를 여러 방법으로 검색
                 transport = Managers.Network.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-                // NetworkPrefabs가 로드될 때까지 대기 (ConfigureNetworkManager async 완료 대기)
-                if (transport != null && Managers.Network.NetworkConfig?.Prefabs?.NetworkPrefabsLists?.Count > 0)
+                if (transport == null)
+                    transport = UnityEngine.Object.FindAnyObjectByType<Unity.Netcode.Transports.UTP.UnityTransport>();
+
+                // Transport만 있으면 진행 (Prefabs는 선택)
+                if (transport != null)
                     break;
             }
 
