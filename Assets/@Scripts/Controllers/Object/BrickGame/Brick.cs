@@ -85,9 +85,6 @@ namespace Unity.Assets.Scripts.Objects
                 _networkWave.Value = newWave;
             }
 
-            // NetworkVariable 변경 콜백 등록
-            _networkWave.OnValueChanged += OnWaveChanged;
-
             // 현재 값 적용 (서버에서 이미 설정됐거나, 클라이언트에서 복제된 값)
             ApplyWave(_networkWave.Value);
 
@@ -98,6 +95,20 @@ namespace Unity.Assets.Scripts.Objects
             Managers.Game?.BrickGame?.Brick?.RegisterBrick(this);
         }
         
+        public override void OnNetworkSpawn()
+        {
+            base.OnNetworkSpawn();
+            _networkWave.OnValueChanged += OnWaveChanged;
+            // Spawn 시 현재 값 즉시 적용
+            ApplyWave(_networkWave.Value);
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            _networkWave.OnValueChanged -= OnWaveChanged;
+            base.OnNetworkDespawn();
+        }
+
         // PhysicsObject에서 상속받은 Update 또는 FixedUpdate 사용
         protected override void FixedUpdate()
         {

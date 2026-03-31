@@ -48,9 +48,10 @@ public class CentralMapBulletController : NetworkBehaviour
 
     #region State
     private Dictionary<int, Cannon> _playerCannons = new Dictionary<int, Cannon>();
-    private Dictionary<ulong, bool> _isFiring = new Dictionary<ulong, bool>(); // 발사 중 여부
+    private Dictionary<ulong, bool> _isFiring = new Dictionary<ulong, bool>();
     private IDisposable _bulletFiredSubscription;
-    private IDisposable _mapComponentSubscription;  // 맵 컴포넌트 구독
+    private IDisposable _mapComponentSubscription;
+    private BrickGameMultiplayerSpawner _cachedSpawner; // 캐싱
     #endregion
 
     #region Properties
@@ -284,7 +285,8 @@ public class CentralMapBulletController : NetworkBehaviour
             $"[Enter키] Player {localClientId} 발사 요청 (블록 개수는 SERVER에서 확인)");
 
         // ✅ BrickGameMultiplayerSpawner의 ServerRpc 호출 (런타임 AddComponent된 NetworkBehaviour는 RPC 불가)
-        var spawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        if (_cachedSpawner == null) _cachedSpawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        var spawner = _cachedSpawner;
         if (spawner != null)
         {
             spawner.RequestCentralMapFireServerRpc(localClientId);
@@ -321,7 +323,8 @@ public class CentralMapBulletController : NetworkBehaviour
             $"[{componentID.ToUpper()}] Player {playerID} 컴포넌트 사용 요청");
 
         // ✅ BrickGameMultiplayerSpawner의 ServerRpc 호출
-        var spawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        if (_cachedSpawner == null) _cachedSpawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        var spawner = _cachedSpawner;
         if (spawner != null)
         {
             spawner.RequestUseMapComponentServerRpc(playerID, componentID);
@@ -490,7 +493,8 @@ public class CentralMapBulletController : NetworkBehaviour
         ulong localClientId = NetworkManager.Singleton.LocalClientId;
 
         // ✅ BrickGameMultiplayerSpawner의 ServerRpc 호출
-        var spawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        if (_cachedSpawner == null) _cachedSpawner = FindObjectOfType<BrickGameMultiplayerSpawner>();
+        var spawner = _cachedSpawner;
         if (spawner != null)
         {
             spawner.RequestCentralMapFireServerRpc(localClientId);
