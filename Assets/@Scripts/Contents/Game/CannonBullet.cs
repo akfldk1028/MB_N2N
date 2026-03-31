@@ -498,8 +498,9 @@ public class CannonBullet : NetworkBehaviour
         }
         else
         {
-            // ✅ GridBlock이 아닌 다른 물체와 충돌 - 무시 (통과)
-            Debug.Log($"<color=gray>[CannonBullet] GridBlock 아님 - 통과 (tag={hitObject.tag})</color>");
+            // GridBlock 조건에 안 맞아도 — 알 수 없는 물체 충돌 시 Despawn (무한 비행 방지)
+            GameLogger.Warning("CannonBullet", $"미확인 충돌 → Despawn: {hitObject.name} tag={hitObject.tag}");
+            DestroyBullet();
         }
     }
 

@@ -81,17 +81,33 @@ namespace Unity.Assets.Scripts.Objects
                     transform.GetChild(i).gameObject.layer = brickLayer;
             }
 
-            // NetworkVariable 콜백 등록 + 현재 값 적용
-            _networkOpType.OnValueChanged += (prev, cur) => { operatorType = (OperatorType)cur; UpdateVisual(); };
-            _networkOpValue.OnValueChanged += (prev, cur) => { operatorValue = cur; UpdateVisual(); };
-
-            // 초기 동기화 값 적용 (Client에서 이미 복제된 값 — 항상 적용)
+            // NV 콜백은 OnNetworkSpawn()에서 등록 (lifecycle 준수)
+            // 초기값은 Start에서 적용 (비네트워크 모드 지원)
             operatorType = (OperatorType)_networkOpType.Value;
             operatorValue = _networkOpValue.Value;
-
-            // 비주얼 업데이트
             UpdateVisual();
         }
+
+        public override void OnNetworkSpawn()
+        {
+            base.OnNetworkSpawn();
+            _networkOpType.OnValueChanged += OnOpTypeChanged;
+            _networkOpValue.OnValueChanged += OnOpValueChanged;
+            // Spawn 시 현재 값 즉시 적용
+            operatorType = (OperatorType)_networkOpType.Value;
+            operatorValue = _networkOpValue.Value;
+            UpdateVisual();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            _networkOpType.OnValueChanged -= OnOpTypeChanged;
+            _networkOpValue.OnValueChanged -= OnOpValueChanged;
+            base.OnNetworkDespawn();
+        }
+
+        private void OnOpTypeChanged(int prev, int cur) { operatorType = (OperatorType)cur; UpdateVisual(); }
+        private void OnOpValueChanged(int prev, int cur) { operatorValue = cur; UpdateVisual(); }
 
         /// <summary>
         /// 연산자 타입과 값 설정 (스폰 시 호출)
