@@ -353,6 +353,20 @@ public class CannonBullet : NetworkBehaviour
             // XZ 평면에서만 이동 (Y는 FreezePositionY로 고정됨)
             Vector3 velocity = new Vector3(moveDir.x * moveSpeed, 0, moveDir.z * moveSpeed);
             _rigidbody.linearVelocity = velocity;
+
+            // ✅ Raycast 보조 충돌 감지 (Trigger는 CCD 미지원 → 고속 총알이 블록을 통과하는 문제 방지)
+            float rayDist = velocity.magnitude * Time.deltaTime * 2f;
+            if (rayDist > 0.01f)
+            {
+                RaycastHit hit;
+                if (Physics.Raycast(transform.position, velocity.normalized, out hit, rayDist))
+                {
+                    if (hit.collider.gameObject != this.gameObject)
+                    {
+                        HandleHit(hit.collider.gameObject);
+                    }
+                }
+            }
         }
 
         // 처음 3프레임만 로그
@@ -368,12 +382,16 @@ public class CannonBullet : NetworkBehaviour
     private void OnTriggerEnter(Collider other)
     {
         // ✅ 모든 충돌 로그 (SERVER/CLIENT 상관없이)
-        Debug.Log($"<color=magenta>[CannonBullet] OnTriggerEnter 호출됨! other={other.name}, IsServer={IsServer}, isDestroying={isDestroying}</color>");
+        Debug.Log($"<color=magenta>[CannonBullet] OnTriggerEnter 호출됨! other={other.name}, IsServer={IsServer}, IsSpawned={IsSpawned}, isDestroying={isDestroying}</color>");
 
         if (isDestroying) return;
 
-        // ✅ SERVER에서만 충돌 처리 (블록 소유권 변경은 서버 권한)
-        if (!IsServer)
+        // Cannon.SpawnBullet()으로 생성된 로컬(비네트워크) 총알은 IsSpawned=false
+        // 이 경우 서버 권한 체크 없이 직접 충돌 처리
+        bool isLocalBullet = !IsSpawned;
+
+        // 네트워크 총알은 SERVER에서만 충돌 처리
+        if (!isLocalBullet && !IsServer)
         {
             Debug.Log($"<color=gray>[CannonBullet] CLIENT에서 충돌 감지 - 처리는 SERVER에서</color>");
             return;
@@ -508,11 +526,16 @@ public class CannonBullet : NetworkBehaviour
     {
         if (isDestroying) return;
 
-        // ✅ SERVER에서만 Despawn 가능
-        if (!IsServer) return;
+        bool isLocalBullet = !IsSpawned;
+
+        // 네트워크 총알은 SERVER에서만 Despawn 가능
+        if (!isLocalBullet && !IsServer) return;
 
         isDestroying = true;
-        _networkIsActive.Value = false;
+
+        // 로컬 총알은 NetworkVariable 접근 불가
+        if (!isLocalBullet)
+            _networkIsActive.Value = false;
 
         // 이펙트 생성
         if (hitEffect != null)
@@ -533,6 +556,11 @@ public class CannonBullet : NetworkBehaviour
                 // ✅ 폴백: 풀이 없으면 파괴
                 NetworkObject.Despawn(true);
             }
+        }
+        else
+        {
+            // 로컬(비네트워크) 총알은 직접 Destroy
+            Destroy(gameObject);
         }
     }
 
