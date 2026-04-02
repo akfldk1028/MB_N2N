@@ -67,6 +67,7 @@ public class CannonBullet : NetworkBehaviour
 
     // ✅ Rigidbody 캐시 (MovePosition 사용을 위해)
     private Rigidbody _rigidbody;
+    private Vector3 _prevPosition;
     private int _moveLogCount = 0;  // 로그 카운터
     private float _fixedY;  // ✅ Y값 고정 (바닥에 묻히지 않도록)
 
@@ -235,6 +236,7 @@ public class CannonBullet : NetworkBehaviour
         }
 
         // ✅ Y=0은 블록과 동일한 높이로 정상값 (보정 제거)
+        _prevPosition = transform.position;
 
         // ✅ XZ 평면에서만 이동하도록 방향 벡터 조정
         Vector3 normalizedDir = new Vector3(dir.x, 0, dir.z).normalized;
@@ -354,12 +356,13 @@ public class CannonBullet : NetworkBehaviour
             Vector3 velocity = new Vector3(moveDir.x * moveSpeed, 0, moveDir.z * moveSpeed);
             _rigidbody.linearVelocity = velocity;
 
-            // ✅ Raycast 보조 충돌 감지 (Trigger는 CCD 미지원 → 고속 총알이 블록을 통과하는 문제 방지)
-            float rayDist = velocity.magnitude * Time.deltaTime * 2f;
-            if (rayDist > 0.01f)
+            // ✅ 이전→현재 전체 경로 Raycast (고속 총알 통과 방지)
+            Vector3 moved = transform.position - _prevPosition;
+            float dist = moved.magnitude;
+            if (dist > 0.01f)
             {
                 RaycastHit hit;
-                if (Physics.Raycast(transform.position, velocity.normalized, out hit, rayDist))
+                if (Physics.Raycast(_prevPosition, moved.normalized, out hit, dist))
                 {
                     if (hit.collider.gameObject != this.gameObject)
                     {
@@ -367,6 +370,7 @@ public class CannonBullet : NetworkBehaviour
                     }
                 }
             }
+            _prevPosition = transform.position;
         }
 
         // 처음 3프레임만 로그
