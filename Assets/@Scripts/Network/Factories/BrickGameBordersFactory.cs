@@ -15,7 +15,7 @@ namespace MB.Network.Factories
 
         #region Configuration
         private readonly Color _borderColor = new Color(0.227f, 0.227f, 0.227f, 1f);
-        private const float BORDER_THICKNESS = 1f;
+        private const float BORDER_THICKNESS = 2f;
         private const float TOP_OFFSET = 12f;
         private const float BOTTOM_OFFSET = 1f;
         #endregion

@@ -240,6 +240,11 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
 
         if (netObj != null)
         {
+            // ✅ 재사용 전 상태 리셋 (isDestroying, velocity 등 초기화)
+            var bullet = netObj.GetComponent<CannonBullet>();
+            if (bullet != null)
+                bullet.ResetForReuse();
+
             netObj.transform.position = position;
             netObj.transform.rotation = rotation;
             netObj.gameObject.SetActive(true);
@@ -271,26 +276,25 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
     public void DespawnAndReturn(NetworkObject netObj)
     {
         if (netObj == null) return;
-        if (!IsServer) return;
+        // ✅ Pool 자체가 NetworkSpawn 안 됐을 수 있으므로 NetworkManager로 체크
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
 
-        // ✅ NetworkObject는 reparent 하면 안됨!
-        // - Spawned 상태: NetworkObject 부모만 허용 (InvalidParentException)
-        // - Despawned 상태: reparent 불가 (SpawnStateException)
-        // → SetActive(false)만 사용하고, 위치는 그대로 둠
+        // ✅ 순서 중요: Despawn → SetActive(false) → 풀 반환
+        // SetActive(false)를 Despawn 전에 하면 Netcode가 클라이언트에 Despawn 메시지를 못 보낼 수 있음
 
-        // 1. 비활성화
-        netObj.gameObject.SetActive(false);
-
-        // 2. 활성 목록에서 제거
+        // 1. 활성 목록에서 제거
         _activeObjects.Remove(netObj);
 
-        // 3. Despawn (Client에 동기화)
+        // 2. Despawn 먼저 (Client에 동기화)
         if (netObj.IsSpawned)
         {
             netObj.Despawn(false); // destroy = false (풀링이므로)
         }
 
-        // 4. 풀에 반환 (중복 방지)
+        // 3. Despawn 후 비활성화
+        netObj.gameObject.SetActive(false);
+
+        // 4. 풀에 반환 (INetworkPrefabInstanceHandler.Destroy에서도 반환되므로 중복 체크)
         if (!_availablePool.Contains(netObj))
         {
             _availablePool.Enqueue(netObj);

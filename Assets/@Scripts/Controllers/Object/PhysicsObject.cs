@@ -31,6 +31,7 @@ namespace Unity.Assets.Scripts.Objects
         protected bool isVisible = true;          // 가시성 여부
         
         // 이전 상태 기록 (보간, 변화 감지 등에 사용)
+        public Vector3 PreviousPosition => previousPosition;
         protected Vector3 previousPosition;
         protected float previousRotation;
         protected Vector2 previousVelocity;

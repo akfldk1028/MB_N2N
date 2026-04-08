@@ -313,8 +313,9 @@ public class CannonBullet : NetworkBehaviour
     /// </summary>
     private void Update()
     {
-        // ✅ lifetime 체크 (SERVER에서만 Despawn)
-        if (IsServer && !isDestroying && Time.time - spawnTime > lifetime)
+        // ✅ lifetime 체크 (로컬 총알도 포함)
+        bool canDestroy = IsServer || !IsSpawned;
+        if (canDestroy && !isDestroying && Time.time - spawnTime > lifetime)
         {
             DestroyBullet();
             return;
@@ -356,17 +357,22 @@ public class CannonBullet : NetworkBehaviour
             Vector3 velocity = new Vector3(moveDir.x * moveSpeed, 0, moveDir.z * moveSpeed);
             _rigidbody.linearVelocity = velocity;
 
-            // ✅ 이전→현재 전체 경로 Raycast (고속 총알 통과 방지)
-            Vector3 moved = transform.position - _prevPosition;
+            // ✅ 이전→현재 전체 경로 RaycastAll (자기 대포 통과 후 Grid 감지)
+            // GridBlock Y=0, 높이=0.2 → 콜라이더 범위 Y=-0.1~0.1
+            // 총알도 Y=0 → 동일 높이에서 Raycast
+            Vector3 curPos = new Vector3(transform.position.x, 0f, transform.position.z);
+            Vector3 prevPos = new Vector3(_prevPosition.x, 0f, _prevPosition.z);
+            Vector3 moved = curPos - prevPos;
             float dist = moved.magnitude;
-            if (dist > 0.01f)
+            if (dist > 0.01f && !isDestroying)
             {
-                RaycastHit hit;
-                if (Physics.Raycast(_prevPosition, moved.normalized, out hit, dist))
+                var hits = Physics.RaycastAll(prevPos, moved.normalized, dist);
+                foreach (var hit in hits)
                 {
                     if (hit.collider.gameObject != this.gameObject)
                     {
                         HandleHit(hit.collider.gameObject);
+                        if (isDestroying) break;
                     }
                 }
             }
@@ -536,6 +542,14 @@ public class CannonBullet : NetworkBehaviour
         if (!isLocalBullet && !IsServer) return;
 
         isDestroying = true;
+        isActive = false;
+
+        // ✅ 즉시 정지 + 비활성화 (Despawn 지연과 무관하게 즉각 효과)
+        if (_rigidbody != null)
+        {
+            _rigidbody.linearVelocity = Vector3.zero;
+            _rigidbody.angularVelocity = Vector3.zero;
+        }
 
         // 로컬 총알은 NetworkVariable 접근 불가
         if (!isLocalBullet)
@@ -547,23 +561,41 @@ public class CannonBullet : NetworkBehaviour
             Instantiate(hitEffect, transform.position, Quaternion.identity);
         }
 
-        // ✅ 풀링 사용: Despawn(false) + 풀로 반환
+        // ✅ 즉시 시각적 숨김 (렌더러만 끄고, SetActive는 Despawn 후에)
+        var renderer = GetComponent<Renderer>();
+        if (renderer != null) renderer.enabled = false;
+        var col = GetComponent<Collider>();
+        if (col != null) col.enabled = false;
+
+        // ✅ Despawn 처리 (풀링 실패 시 강제 Despawn fallback)
         if (IsSpawned)
         {
-            if (NetworkBulletPool.Instance != null)
+            try
             {
-                // ✅ 풀로 반환 (Despawn + ReturnToPool)
-                NetworkBulletPool.Instance.DespawnAndReturn(NetworkObject);
+                if (NetworkBulletPool.Instance != null)
+                {
+                    NetworkBulletPool.Instance.DespawnAndReturn(NetworkObject);
+                }
+                else
+                {
+                    NetworkObject.Despawn(true);
+                }
             }
-            else
+            catch (System.Exception e)
             {
-                // ✅ 폴백: 풀이 없으면 파괴
-                NetworkObject.Despawn(true);
+                Debug.LogWarning($"[CannonBullet] DespawnAndReturn 실패, 강제 Despawn: {e.Message}");
+                try { NetworkObject.Despawn(true); } catch { }
+                gameObject.SetActive(false);
+            }
+
+            // ✅ fallback: Despawn 후에도 아직 active면 강제 비활성화
+            if (gameObject.activeInHierarchy)
+            {
+                gameObject.SetActive(false);
             }
         }
         else
         {
-            // 로컬(비네트워크) 총알은 직접 Destroy
             Destroy(gameObject);
         }
     }
@@ -581,7 +613,7 @@ public class CannonBullet : NetworkBehaviour
         ownerColor = Color.white;
         spawnTime = Time.time;
         _moveLogCount = 0;
-        _fixedY = 0f;  // Y값 고정 리셋
+        _fixedY = 0f;
 
         // ✅ Rigidbody 속도 리셋
         if (_rigidbody != null)
@@ -589,6 +621,12 @@ public class CannonBullet : NetworkBehaviour
             _rigidbody.linearVelocity = Vector3.zero;
             _rigidbody.angularVelocity = Vector3.zero;
         }
+
+        // ✅ DestroyBullet에서 끈 렌더러/콜라이더 복원
+        var renderer = GetComponent<Renderer>();
+        if (renderer != null) renderer.enabled = true;
+        var col = GetComponent<Collider>();
+        if (col != null) col.enabled = true;
 
         // ✅ SERVER 컨텍스트에서만 NetworkVariable 리셋
         bool isServerContext = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;

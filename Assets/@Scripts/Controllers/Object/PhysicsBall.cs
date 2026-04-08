@@ -540,13 +540,15 @@ namespace Unity.Assets.Scripts.Objects
 
         private void UpdateMovingState(){}
 
-        // UpdateMovingPhysics 메서드 개선 - 속도 상한 추가
+        // UpdateMovingPhysics 메서드 개선 - 속도 상한 + 상단 경계 안전장치
+        private float _cachedTopBorderY = float.MaxValue;
+
         private void UpdateMovingPhysics()
         {
             if (rb != null)
             {
                 float currentSpeed = rb.linearVelocity.magnitude;
-                
+
                 // 속도가 너무 느리면 최소 속도 유지
                 if (currentSpeed > 0 && currentSpeed < 5f)
                 {
@@ -556,12 +558,49 @@ namespace Unity.Assets.Scripts.Objects
                 else if (currentSpeed > 20f)
                 {
                     rb.linearVelocity = rb.linearVelocity.normalized * 20f;
-                    
+
                     #if UNITY_EDITOR || DEVELOPMENT_BUILD
                     Debug.LogWarning($"[{gameObject.name}] Ball speed capped at 20 (was {currentSpeed:F1})");
                     #endif
                 }
+
+                // 상단 경계 안전장치: borderTop 콜라이더를 뚫고 나갔을 때 강제 반사
+                if (_cachedTopBorderY == float.MaxValue)
+                {
+                    CacheTopBorderY();
+                }
+                if (transform.position.y > _cachedTopBorderY)
+                {
+                    Vector2 vel = rb.linearVelocity;
+                    if (vel.y > 0) // 위로 가고 있으면 반사
+                    {
+                        vel.y = -Mathf.Abs(vel.y);
+                        rb.linearVelocity = vel;
+                    }
+                    // 위치도 경계 안으로 강제 이동
+                    transform.position = new Vector3(transform.position.x, _cachedTopBorderY - 0.1f, transform.position.z);
+                    Debug.LogWarning($"[{gameObject.name}] Ball escaped top border! Y={transform.position.y:F2}, forced back.");
+                }
             }
+        }
+
+        private void CacheTopBorderY()
+        {
+            // 자기 플레이어의 borderTop 찾기
+            string borderName = $"borderTop_Player{OwnerClientId}";
+            var borderGO = GameObject.Find(borderName);
+            if (borderGO != null)
+            {
+                var col = borderGO.GetComponent<BoxCollider2D>();
+                if (col != null)
+                {
+                    // 콜라이더 하단이 실제 경계
+                    _cachedTopBorderY = col.bounds.min.y;
+                    return;
+                }
+            }
+            // fallback: 기본값
+            _cachedTopBorderY = 8.0f;
         }
         #endregion
         
