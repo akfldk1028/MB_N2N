@@ -65,6 +65,7 @@ public class Managers : MonoBehaviour
     private SoundManager _sound = new SoundManager();
     private VFXManager _vfx = new VFXManager();
     private ThemeManager _theme = new ThemeManager();
+    private HitEffectManager _hitEffect = new HitEffectManager();
 
     public static GameManager Game { get { return Instance?._game; } }
     public static ObjectManager Object { get { return Instance?._object; } }
@@ -74,6 +75,7 @@ public class Managers : MonoBehaviour
     public static SoundManager Sound { get { return Instance?._sound; } }
     public static VFXManager VFX { get { return Instance?._vfx; } }
     public static ThemeManager Theme { get { return Instance?._theme; } }
+    public static HitEffectManager HitEffect { get { return Instance?._hitEffect; } }
     #endregion
 
     #region Core
@@ -158,6 +160,9 @@ public class Managers : MonoBehaviour
 
         // 테마 시스템 초기화
         _theme.Init();
+
+        // 히트 이펙트 시스템 초기화
+        _hitEffect.Init();
 
         // 네트워크 컴포넌트 초기화
         await InitializeNetworkComponents();
