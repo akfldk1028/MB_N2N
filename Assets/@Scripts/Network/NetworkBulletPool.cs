@@ -3,31 +3,26 @@ using UnityEngine;
 using Unity.Netcode;
 
 /// <summary>
-/// NetworkObject 총알 풀링 시스템
+/// 총알 풀링 시스템 (MonoBehaviour 기반)
 /// INetworkPrefabInstanceHandler를 구현하여 Netcode와 통합
 ///
-/// 사용법:
-/// 1. 씬에 빈 오브젝트 생성 후 이 컴포넌트 추가
-/// 2. BulletPrefab에 총알 프리팹 할당
-/// 3. InitialPoolSize로 초기 풀 크기 설정
-///
-/// 참고: Unity Netcode for GameObjects 공식 문서
-/// https://docs-multiplayer.unity3d.com/netcode/current/advanced-topics/object-pooling/
+/// ✅ NetworkBehaviour가 아님 — Spawn 불필요, NetworkManager 상태는 전역으로 확인
 /// </summary>
-public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
+public class NetworkBulletPool : MonoBehaviour, INetworkPrefabInstanceHandler
 {
     #region Settings
     [Header("풀링 설정")]
     [SerializeField] private GameObject bulletPrefab;
-    [SerializeField] private int initialPoolSize = 500;      // ✅ 초기 풀 크기 (500개 미리 생성)
-    [SerializeField] private int maxPoolSize = 3000;         // ✅ 최대 풀 크기 (대량 발사 대비)
-    [SerializeField] private Transform poolRoot;             // 풀 오브젝트 부모
+    [SerializeField] private int initialPoolSize = 500;
+    [SerializeField] private int maxPoolSize = 3000;
+    [SerializeField] private Transform poolRoot;
     #endregion
 
     #region Pool State
     private Queue<NetworkObject> _availablePool = new Queue<NetworkObject>();
     private HashSet<NetworkObject> _activeObjects = new HashSet<NetworkObject>();
     private bool _isInitialized = false;
+    private bool _handlerRegistered = false;
     #endregion
 
     #region Singleton
@@ -40,9 +35,6 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
     public int TotalCount => AvailableCount + ActiveCount;
     public GameObject BulletPrefab => bulletPrefab;
 
-    /// <summary>
-    /// 동적 생성 시 bulletPrefab 설정 (씬에 배치하지 않고 코드로 생성할 때 사용)
-    /// </summary>
     public void SetBulletPrefab(GameObject prefab)
     {
         if (prefab == null)
@@ -50,15 +42,11 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
             GameLogger.Error("NetworkBulletPool", "SetBulletPrefab: prefab이 null입니다!");
             return;
         }
-
-        // NetworkObject 확인
-        var netObj = prefab.GetComponent<NetworkObject>();
-        if (netObj == null)
+        if (prefab.GetComponent<NetworkObject>() == null)
         {
             GameLogger.Error("NetworkBulletPool", "SetBulletPrefab: prefab에 NetworkObject가 없습니다!");
             return;
         }
-
         bulletPrefab = prefab;
         GameLogger.Success("NetworkBulletPool", $"BulletPrefab 설정됨: {prefab.name}");
     }
@@ -78,7 +66,6 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
             return;
         }
 
-        // 풀 루트 생성
         if (poolRoot == null)
         {
             var rootGO = new GameObject("@BulletPool");
@@ -86,62 +73,50 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
         }
     }
 
-    public override void OnNetworkSpawn()
+    private void Update()
     {
-        base.OnNetworkSpawn();
-
-        // Prefab Handler에 등록
-        if (bulletPrefab != null)
+        // NetworkManager가 준비되면 PrefabHandler 등록 + 풀 초기화
+        if (!_handlerRegistered && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
         {
-            NetworkManager.Singleton.PrefabHandler.AddHandler(bulletPrefab, this);
-            GameLogger.Success("NetworkBulletPool", $"PrefabHandler 등록 완료: {bulletPrefab.name}");
+            RegisterHandler();
         }
-        else
-        {
-            GameLogger.Error("NetworkBulletPool", "bulletPrefab이 null입니다!");
-        }
+    }
 
-        // 초기 풀 생성 (Server/Host/Client 모두)
+    private void OnDestroy()
+    {
+        UnregisterHandler();
+        ClearPool();
+
+        if (Instance == this)
+            Instance = null;
+    }
+    #endregion
+
+    #region Handler Registration
+    private void RegisterHandler()
+    {
+        if (_handlerRegistered) return;
+        if (bulletPrefab == null) return;
+
+        NetworkManager.Singleton.PrefabHandler.AddHandler(bulletPrefab, this);
+        _handlerRegistered = true;
+        GameLogger.Success("NetworkBulletPool", $"PrefabHandler 등록 완료: {bulletPrefab.name}");
+
         InitializePool();
     }
 
-    public override void OnNetworkDespawn()
+    private void UnregisterHandler()
     {
-        // Prefab Handler에서 해제
+        if (!_handlerRegistered) return;
         if (bulletPrefab != null && NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.PrefabHandler.RemoveHandler(bulletPrefab);
         }
-
-        // 모든 활성 오브젝트 Despawn
-        foreach (var netObj in _activeObjects)
-        {
-            if (netObj != null && netObj.IsSpawned)
-            {
-                netObj.Despawn();
-            }
-        }
-
-        // 풀 정리
-        ClearPool();
-
-        base.OnNetworkDespawn();
-    }
-
-    public override void OnDestroy()
-    {
-        if (Instance == this)
-        {
-            Instance = null;
-        }
-        base.OnDestroy();
+        _handlerRegistered = false;
     }
     #endregion
 
     #region Pool Initialization
-    /// <summary>
-    /// 초기 풀 생성
-    /// </summary>
     private void InitializePool()
     {
         if (_isInitialized) return;
@@ -158,9 +133,6 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
         GameLogger.Success("NetworkBulletPool", $"풀 초기화 완료! (생성: {_availablePool.Count}개)");
     }
 
-    /// <summary>
-    /// 새 풀 오브젝트 생성
-    /// </summary>
     private NetworkObject CreatePooledObject()
     {
         GameObject go = Instantiate(bulletPrefab, poolRoot);
@@ -179,68 +151,53 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
         return netObj;
     }
 
-    /// <summary>
-    /// 풀 정리
-    /// </summary>
     private void ClearPool()
     {
         while (_availablePool.Count > 0)
         {
             var netObj = _availablePool.Dequeue();
-            if (netObj != null)
-            {
-                Destroy(netObj.gameObject);
-            }
+            if (netObj != null) Destroy(netObj.gameObject);
         }
-
         _activeObjects.Clear();
         _isInitialized = false;
     }
     #endregion
 
-    #region INetworkPrefabInstanceHandler Implementation
-    /// <summary>
-    /// Client에서 NetworkObject 생성 시 호출
-    /// (Server/Host에서는 호출되지 않음)
-    /// </summary>
+    #region INetworkPrefabInstanceHandler
     public NetworkObject Instantiate(ulong ownerClientId, Vector3 position, Quaternion rotation)
     {
         NetworkObject netObj = GetFromPool();
-
         if (netObj != null)
         {
             netObj.transform.position = position;
             netObj.transform.rotation = rotation;
             netObj.gameObject.SetActive(true);
-
-            GameLogger.DevLog("NetworkBulletPool", $"[Client] 풀에서 꺼냄: {netObj.name}, pos={position}");
         }
-
         return netObj;
     }
 
     /// <summary>
-    /// NetworkObject 파괴 시 호출 (Client/Server 모두)
+    /// Despawn 시 Netcode가 호출하는 콜백 — 풀로 반환
     /// </summary>
     public void Destroy(NetworkObject networkObject)
     {
-        ReturnToPool(networkObject);
-        GameLogger.DevLog("NetworkBulletPool", $"[Destroy] 풀로 반환: {networkObject?.name}");
+        if (networkObject == null) return;
+        networkObject.gameObject.SetActive(false);
+        _activeObjects.Remove(networkObject);
+
+        if (!_availablePool.Contains(networkObject))
+        {
+            _availablePool.Enqueue(networkObject);
+        }
     }
     #endregion
 
-    #region Public API (Server에서 사용)
-    /// <summary>
-    /// [Server] 풀에서 총알 가져오기
-    /// Spawn() 호출 전에 사용
-    /// </summary>
+    #region Public API
     public NetworkObject GetNetworkObject(Vector3 position, Quaternion rotation)
     {
         NetworkObject netObj = GetFromPool();
-
         if (netObj != null)
         {
-            // ✅ 재사용 전 상태 리셋 (isDestroying, velocity 등 초기화)
             var bullet = netObj.GetComponent<CannonBullet>();
             if (bullet != null)
                 bullet.ResetForReuse();
@@ -249,68 +206,41 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
             netObj.transform.rotation = rotation;
             netObj.gameObject.SetActive(true);
             _activeObjects.Add(netObj);
-
-            GameLogger.DevLog("NetworkBulletPool", $"[Server] 풀에서 꺼냄: {netObj.name}, 남은 풀: {_availablePool.Count}");
         }
-
         return netObj;
     }
 
     /// <summary>
-    /// [Server] 총알을 풀로 반환
-    /// Despawn() 호출 후 사용
-    /// </summary>
-    public void ReturnNetworkObject(NetworkObject netObj)
-    {
-        if (netObj == null) return;
-
-        _activeObjects.Remove(netObj);
-        ReturnToPool(netObj);
-
-        GameLogger.DevLog("NetworkBulletPool", $"[Server] 풀로 반환: {netObj.name}, 사용 가능: {_availablePool.Count}");
-    }
-
-    /// <summary>
-    /// 총알 Despawn 및 풀 반환 (Server 전용)
+    /// 총알 Despawn + 풀 반환 (Server 전용)
+    /// Despawn(false) → Netcode Destroy 콜백이 자동으로 풀 반환 처리
     /// </summary>
     public void DespawnAndReturn(NetworkObject netObj)
     {
         if (netObj == null) return;
-        // ✅ Pool 자체가 NetworkSpawn 안 됐을 수 있으므로 NetworkManager로 체크
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
 
-        // ✅ 순서 중요: Despawn → SetActive(false) → 풀 반환
-        // SetActive(false)를 Despawn 전에 하면 Netcode가 클라이언트에 Despawn 메시지를 못 보낼 수 있음
-
-        // 1. 활성 목록에서 제거
         _activeObjects.Remove(netObj);
 
-        // 2. Despawn 먼저 (Client에 동기화)
+        // Despawn → Netcode가 INetworkPrefabInstanceHandler.Destroy 콜백 호출 → 풀 반환
+        // Despawn 실행
         if (netObj.IsSpawned)
         {
-            netObj.Despawn(false); // destroy = false (풀링이므로)
+            netObj.Despawn(false);
         }
 
-        // 3. Despawn 후 비활성화
+        // ✅ 서버에서는 INetworkPrefabInstanceHandler.Destroy 콜백이 안 불림
+        // 직접 비활성화 + 풀 반환 처리
         netObj.gameObject.SetActive(false);
-
-        // 4. 풀에 반환 (INetworkPrefabInstanceHandler.Destroy에서도 반환되므로 중복 체크)
         if (!_availablePool.Contains(netObj))
         {
             _availablePool.Enqueue(netObj);
         }
-
-        GameLogger.DevLog("NetworkBulletPool", $"[DespawnAndReturn] 풀 반환 완료: {netObj.name}, 사용 가능: {_availablePool.Count}");
     }
     #endregion
 
-    #region Private Methods
-    /// <summary>
-    /// 풀에서 오브젝트 가져오기
-    /// </summary>
+    #region Private
     private NetworkObject GetFromPool()
     {
-        // 풀이 비어있으면 새로 생성
         if (_availablePool.Count == 0)
         {
             if (TotalCount < maxPoolSize)
@@ -318,45 +248,10 @@ public class NetworkBulletPool : NetworkBehaviour, INetworkPrefabInstanceHandler
                 GameLogger.Warning("NetworkBulletPool", $"풀 확장! (현재: {TotalCount}, 최대: {maxPoolSize})");
                 return CreatePooledObject();
             }
-            else
-            {
-                GameLogger.Error("NetworkBulletPool", $"풀 최대 크기 초과! ({maxPoolSize})");
-                return null;
-            }
+            GameLogger.Error("NetworkBulletPool", $"풀 최대 크기 초과! ({maxPoolSize})");
+            return null;
         }
-
         return _availablePool.Dequeue();
-    }
-
-    /// <summary>
-    /// 오브젝트를 풀로 반환 (INetworkPrefabInstanceHandler.Destroy에서 호출됨)
-    /// </summary>
-    private void ReturnToPool(NetworkObject netObj)
-    {
-        if (netObj == null) return;
-
-        // ✅ NetworkObject는 reparent 하면 안됨! SetActive(false)만 사용
-        netObj.gameObject.SetActive(false);
-
-        // 이미 풀에 있는지 확인 (중복 방지)
-        if (!_availablePool.Contains(netObj))
-        {
-            _availablePool.Enqueue(netObj);
-        }
-
-        _activeObjects.Remove(netObj);
-    }
-    #endregion
-
-    #region Debug
-    /// <summary>
-    /// 풀 상태 출력 (디버그용)
-    /// </summary>
-    [ContextMenu("Print Pool Status")]
-    public void PrintPoolStatus()
-    {
-        GameLogger.Info("NetworkBulletPool",
-            $"풀 상태: 사용 가능={AvailableCount}, 활성={ActiveCount}, 총={TotalCount}");
     }
     #endregion
 }
