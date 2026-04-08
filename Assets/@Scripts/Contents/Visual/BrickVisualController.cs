@@ -5,22 +5,28 @@ using MB.Infrastructure.Messages;
 namespace MB.Visual
 {
     /// <summary>
-    /// 벽돌 비주얼 컴포넌트 — SpriteRenderer/Renderer 둘 다 지원
-    /// 기존 Brick 로직 수정 없이 색상 + 히트 애니메이션 처리
+    /// 벽돌 비주얼 — 둥근 젤리 스프라이트 적용 + 테마 색상 틴트 + 히트 애니메이션
+    /// SpriteRenderer.color 사용 (GPU 최적, SRP Batcher 호환)
     /// </summary>
     public class BrickVisualController : MonoBehaviour
     {
-        private SpriteRenderer _spriteRenderer;
-        private Renderer _renderer;
+        private SpriteRenderer _sr;
         private int _hp = 1;
         private IDisposable _themeSubscription;
         private Vector3 _originalScale;
+        private static Sprite _jellySprite;
 
         private void Awake()
         {
-            _spriteRenderer = GetComponent<SpriteRenderer>();
-            _renderer = GetComponent<Renderer>();
+            _sr = GetComponent<SpriteRenderer>();
             _originalScale = transform.localScale;
+
+            // 젤리 스프라이트 로드 + 적용
+            if (_jellySprite == null)
+                _jellySprite = Resources.Load<Sprite>("Sprites/JellyBrick");
+
+            if (_jellySprite != null && _sr != null)
+                _sr.sprite = _jellySprite;
         }
 
         private void OnEnable()
@@ -44,62 +50,42 @@ namespace MB.Visual
 
         public void OnHit()
         {
+            if (!gameObject.activeInHierarchy) return;
             StartCoroutine(HitFlashCoroutine());
             StartCoroutine(SquashCoroutine());
         }
 
         private void UpdateColor()
         {
+            if (_sr == null) return;
             var theme = Managers.Theme?.CurrentTheme;
             if (theme == null) return;
 
             Color c = theme.GetBrickColor(_hp);
-            c.a = 0.9f; // 살짝 반투명
-
-            if (_spriteRenderer != null)
-            {
-                _spriteRenderer.color = c;
-            }
-            else if (_renderer != null)
-            {
-                var mpb = new MaterialPropertyBlock();
-                _renderer.GetPropertyBlock(mpb);
-                mpb.SetColor("_BaseColor", c);
-                _renderer.SetPropertyBlock(mpb);
-            }
+            c.a = 0.92f;
+            _sr.color = c;
         }
 
         private System.Collections.IEnumerator HitFlashCoroutine()
         {
-            // Flash white
-            SetColor(new Color(1f, 1f, 1f, 0.95f));
-            yield return new WaitForSeconds(0.08f);
-            UpdateColor();
+            if (_sr == null) yield break;
+            Color original = _sr.color;
+            _sr.color = Color.white;
+            yield return new WaitForSeconds(0.06f);
+            _sr.color = original;
         }
 
         private System.Collections.IEnumerator SquashCoroutine()
         {
             var s = _originalScale;
-            transform.localScale = new Vector3(s.x * 1.3f, s.y * 0.7f, s.z);
-            yield return new WaitForSeconds(0.05f);
-            transform.localScale = new Vector3(s.x * 0.85f, s.y * 1.15f, s.z);
-            yield return new WaitForSeconds(0.05f);
-            transform.localScale = new Vector3(s.x * 1.05f, s.y * 0.95f, s.z);
+            transform.localScale = new Vector3(s.x * 1.25f, s.y * 0.75f, s.z);
+            yield return new WaitForSeconds(0.04f);
+            transform.localScale = new Vector3(s.x * 0.9f, s.y * 1.1f, s.z);
             yield return new WaitForSeconds(0.04f);
             transform.localScale = s;
         }
 
-        private void SetColor(Color c)
-        {
-            if (_spriteRenderer != null)
-                _spriteRenderer.color = c;
-            else if (_renderer != null)
-            {
-                var mpb = new MaterialPropertyBlock();
-                _renderer.GetPropertyBlock(mpb);
-                mpb.SetColor("_BaseColor", c);
-                _renderer.SetPropertyBlock(mpb);
-            }
-        }
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() { _jellySprite = null; }
     }
 }
