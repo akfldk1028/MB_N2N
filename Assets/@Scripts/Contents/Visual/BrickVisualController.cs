@@ -4,31 +4,27 @@ using MB.Infrastructure.Messages;
 
 namespace MB.Visual
 {
+    /// <summary>
+    /// 벽돌 비주얼 컴포넌트 — SpriteRenderer/Renderer 둘 다 지원
+    /// 기존 Brick 로직 수정 없이 색상 + 히트 애니메이션 처리
+    /// </summary>
     public class BrickVisualController : MonoBehaviour
     {
+        private SpriteRenderer _spriteRenderer;
         private Renderer _renderer;
-        private MaterialPropertyBlock _mpb;
         private int _hp = 1;
         private IDisposable _themeSubscription;
-        private static Material _jellyMaterial;
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private Vector3 _originalScale;
 
         private void Awake()
         {
+            _spriteRenderer = GetComponent<SpriteRenderer>();
             _renderer = GetComponent<Renderer>();
-            _mpb = new MaterialPropertyBlock();
-
-            // 젤리 머티리얼 적용 (한 번만 로드)
-            if (_jellyMaterial == null)
-                _jellyMaterial = Resources.Load<Material>("Materials/Mat_JellyBrick");
-
-            if (_jellyMaterial != null && _renderer != null)
-                _renderer.sharedMaterial = _jellyMaterial;
+            _originalScale = transform.localScale;
         }
 
         private void OnEnable()
         {
-            // 테마 변경 이벤트 구독
             if (Managers.ActionBus != null)
                 _themeSubscription = Managers.ActionBus.Subscribe(ActionId.Visual_ThemeChanged, UpdateColor);
             UpdateColor();
@@ -55,43 +51,55 @@ namespace MB.Visual
         private void UpdateColor()
         {
             var theme = Managers.Theme?.CurrentTheme;
-            if (theme == null || _renderer == null) return;
+            if (theme == null) return;
 
-            _renderer.GetPropertyBlock(_mpb);
             Color c = theme.GetBrickColor(_hp);
-            c.a = 0.85f;
-            _mpb.SetColor(BaseColorId, c);
-            _renderer.SetPropertyBlock(_mpb);
+            c.a = 0.9f; // 살짝 반투명
+
+            if (_spriteRenderer != null)
+            {
+                _spriteRenderer.color = c;
+            }
+            else if (_renderer != null)
+            {
+                var mpb = new MaterialPropertyBlock();
+                _renderer.GetPropertyBlock(mpb);
+                mpb.SetColor("_BaseColor", c);
+                _renderer.SetPropertyBlock(mpb);
+            }
         }
 
         private System.Collections.IEnumerator HitFlashCoroutine()
         {
-            if (_renderer == null) yield break;
-            _renderer.GetPropertyBlock(_mpb);
-
-            _mpb.SetColor(BaseColorId, Color.white);
-            _renderer.SetPropertyBlock(_mpb);
+            // Flash white
+            SetColor(new Color(1f, 1f, 1f, 0.95f));
             yield return new WaitForSeconds(0.08f);
-
             UpdateColor();
         }
 
         private System.Collections.IEnumerator SquashCoroutine()
         {
-            transform.localScale = new Vector3(1.3f, 0.7f, 1f);
+            var s = _originalScale;
+            transform.localScale = new Vector3(s.x * 1.3f, s.y * 0.7f, s.z);
             yield return new WaitForSeconds(0.05f);
-            transform.localScale = new Vector3(0.85f, 1.15f, 1f);
+            transform.localScale = new Vector3(s.x * 0.85f, s.y * 1.15f, s.z);
             yield return new WaitForSeconds(0.05f);
-            transform.localScale = new Vector3(1.05f, 0.95f, 1f);
+            transform.localScale = new Vector3(s.x * 1.05f, s.y * 0.95f, s.z);
             yield return new WaitForSeconds(0.04f);
-            transform.localScale = Vector3.one;
+            transform.localScale = s;
         }
 
-        // Domain Reload off 대응
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics()
+        private void SetColor(Color c)
         {
-            _jellyMaterial = null;
+            if (_spriteRenderer != null)
+                _spriteRenderer.color = c;
+            else if (_renderer != null)
+            {
+                var mpb = new MaterialPropertyBlock();
+                _renderer.GetPropertyBlock(mpb);
+                mpb.SetColor("_BaseColor", c);
+                _renderer.SetPropertyBlock(mpb);
+            }
         }
     }
 }

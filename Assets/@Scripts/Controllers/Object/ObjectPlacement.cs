@@ -592,6 +592,13 @@ private List<PotentialSpawnInfo> CalculatePotentialSpawnPositions(int rowCount)
             activeObjectData.Add(newObject, true);
         }
 
+        // ✅ 벽돌 비주얼 컴포넌트 자동 추가
+        if (newObject.CompareTag("Brick") || objectType == SpawnableObjectType.Brick || objectType == SpawnableObjectType.OperatorBrick)
+        {
+            if (newObject.GetComponent<MB.Visual.BrickVisualController>() == null)
+                newObject.AddComponent<MB.Visual.BrickVisualController>();
+        }
+
         StartCoroutine(MoveObjectToTargetY(newObject, targetY));
     }
     
