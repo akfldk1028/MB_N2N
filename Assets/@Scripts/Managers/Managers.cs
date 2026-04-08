@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using MB.Infrastructure.Messages;
 using MB.Infrastructure.State;
+using MB.Visual;
 using Unity.Assets.Scripts.Network;
 using Unity.Assets.Scripts.UnityServices.Lobbies;
 using Unity.Netcode;
@@ -63,6 +64,7 @@ public class Managers : MonoBehaviour
     private CameraManager _camera = new CameraManager();
     private SoundManager _sound = new SoundManager();
     private VFXManager _vfx = new VFXManager();
+    private ThemeManager _theme = new ThemeManager();
 
     public static GameManager Game { get { return Instance?._game; } }
     public static ObjectManager Object { get { return Instance?._object; } }
@@ -71,6 +73,7 @@ public class Managers : MonoBehaviour
     public static CameraManager Camera { get { return Instance?._camera; } }
     public static SoundManager Sound { get { return Instance?._sound; } }
     public static VFXManager VFX { get { return Instance?._vfx; } }
+    public static ThemeManager Theme { get { return Instance?._theme; } }
     #endregion
 
     #region Core
@@ -152,6 +155,9 @@ public class Managers : MonoBehaviour
 
         // VFX 시스템 초기화
         _vfx.Init();
+
+        // 테마 시스템 초기화
+        _theme.Init();
 
         // 네트워크 컴포넌트 초기화
         await InitializeNetworkComponents();

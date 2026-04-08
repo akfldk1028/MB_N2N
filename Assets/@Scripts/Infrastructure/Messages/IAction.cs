@@ -44,7 +44,10 @@ namespace MB.Infrastructure.Messages
         BrickGame_GameEnded,         // 게임 종료 (승자/패자 결정됨)
         BrickGame_PowerUpCollected,  // 파워업 아이템 획득
         BrickGame_ComponentChargeChanged,  // 컴포넌트 게이지 충전 변경 (Bomb/Harvest)
-        BrickGame_BallBounce              // 볼 바운스 VFX (충돌 이펙트)
+        BrickGame_BallBounce,             // 볼 바운스 VFX (충돌 이펙트)
+
+        // 비주얼 이벤트
+        Visual_ThemeChanged,
     }
 
     public interface IActionPayload { }
